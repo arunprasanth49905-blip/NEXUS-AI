@@ -1,6 +1,6 @@
 /**
  * NEXUS EDGE API Service Client
- * Phase 1, Phase 2 (Runtime) & Phase 3 (Multimodal Perception)
+ * Phase 1, Phase 2 (Runtime), Phase 3 (Multimodal Perception) & Phase 4 (Context & Memory)
  */
 
 import type {
@@ -20,6 +20,12 @@ import type {
   ScreenCaptureRequest,
   CameraCaptureRequest,
   VoiceTranscriptionRequest,
+  ContextMemoryStatusResponse,
+  MemoryRecord,
+  ActiveTask,
+  ContextSession,
+  MemorySearchResult,
+  MemoryType,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -97,6 +103,15 @@ class ApiService {
     fallback_used?: boolean;
     fallback_reason?: string | null;
     multimodal_context?: string;
+    context_understanding?: {
+      category?: string;
+      intent?: string;
+      active_task?: string | null;
+      entities?: string[];
+      topics?: string[];
+      retrieved_memories_count?: number;
+      estimated_tokens?: number;
+    };
     timestamp: string;
   }> {
     return this.request('/assistant/query', {
@@ -206,6 +221,76 @@ class ApiService {
     return this.request('/perception/context/merge', {
       method: 'POST',
       body: JSON.stringify({ context_ids: contextIds, primary_query: primaryQuery }),
+    });
+  }
+
+  // --- Phase 4 Context & Memory Endpoints ---
+  public async getContextMemoryStatus(): Promise<ContextMemoryStatusResponse> {
+    return this.request<ContextMemoryStatusResponse>('/context/status');
+  }
+
+  public async getSession(): Promise<{ session: ContextSession }> {
+    return this.request<{ session: ContextSession }>('/context/session');
+  }
+
+  public async resetSession(title?: string): Promise<{ session: ContextSession }> {
+    return this.request<{ session: ContextSession }>('/context/session', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    });
+  }
+
+  public async getCurrentTask(): Promise<{ active_task: ActiveTask | null }> {
+    return this.request<{ active_task: ActiveTask | null }>('/tasks/current');
+  }
+
+  public async setActiveTask(title: string, description?: string): Promise<{ active_task: ActiveTask }> {
+    return this.request<{ active_task: ActiveTask }>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title, description }),
+    });
+  }
+
+  public async clearActiveTask(): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>('/tasks/current', {
+      method: 'DELETE',
+    });
+  }
+
+  public async getMemories(type?: MemoryType): Promise<{ memories: MemoryRecord[]; total: number }> {
+    const endpoint = type ? `/memory?type=${type}` : '/memory';
+    return this.request<{ memories: MemoryRecord[]; total: number }>(endpoint);
+  }
+
+  public async saveMemory(data: { content: string; memory_type?: MemoryType; summary?: string }): Promise<{ success: boolean; memory: MemoryRecord; reason: string }> {
+    return this.request<{ success: boolean; memory: MemoryRecord; reason: string }>('/memory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public async searchMemories(query: string): Promise<MemorySearchResult> {
+    return this.request<MemorySearchResult>('/memory/search', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    });
+  }
+
+  public async deleteMemory(id: string): Promise<{ success: boolean; memory_id: string }> {
+    return this.request<{ success: boolean; memory_id: string }>(`/memory/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  public async clearSessionMemory(): Promise<{ success: boolean; deleted_count: number }> {
+    return this.request<{ success: boolean; deleted_count: number }>('/memory/session', {
+      method: 'DELETE',
+    });
+  }
+
+  public async clearProjectMemory(): Promise<{ success: boolean; deleted_count: number }> {
+    return this.request<{ success: boolean; deleted_count: number }>('/memory/project', {
+      method: 'DELETE',
     });
   }
 

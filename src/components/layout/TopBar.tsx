@@ -29,6 +29,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         return 'Overview';
       case 'ask-nexus':
         return 'Ask NEXUS';
+      case 'memory':
+        return 'Memory Center';
       case 'knowledge':
         return 'Knowledge Workspace';
       case 'activity':

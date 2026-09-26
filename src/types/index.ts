@@ -1,14 +1,16 @@
 /**
  * NEXUS EDGE Central Type Definitions
- * Phase 1, Phase 2 (Runtime) & Phase 3 (Multimodal Perception)
+ * Phase 1, Phase 2 (Runtime), Phase 3 (Multimodal Perception), & Phase 4 (Context & Memory)
  */
 
 export * from './runtime';
 export * from './perception';
+export * from './context_memory';
 
 export type NavPage = 
   | 'home' 
   | 'ask-nexus' 
+  | 'memory' 
   | 'knowledge' 
   | 'activity' 
   | 'settings' 
@@ -73,6 +75,8 @@ export interface ContextInfo {
   active_sources: number;
   phase: string;
   active_model?: string;
+  active_task?: string | null;
+  session_id?: string;
 }
 
 export interface ChatMessage {
@@ -87,6 +91,15 @@ export interface ChatMessage {
   fallbackReason?: string | null;
   multimodalContext?: string;
   attachedContextIds?: string[];
+  contextUnderstanding?: {
+    category?: string;
+    intent?: string;
+    active_task?: string | null;
+    entities?: string[];
+    topics?: string[];
+    retrieved_memories_count?: number;
+    estimated_tokens?: number;
+  };
   isStreaming?: boolean;
 }
 

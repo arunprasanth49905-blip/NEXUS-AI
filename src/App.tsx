@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { Home } from './pages/Home';
 import { AskNexus } from './pages/AskNexus';
+import { Memory } from './pages/Memory';
 import { Knowledge } from './pages/Knowledge';
 import { Activity } from './pages/Activity';
 import { Settings } from './pages/Settings';
@@ -107,6 +108,8 @@ export function App() {
             onAddToast={addToast}
           />
         );
+      case 'memory':
+        return <Memory onAddToast={addToast} />;
       case 'knowledge':
         return <Knowledge onAddToast={addToast} />;
       case 'activity':

@@ -4,8 +4,10 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { RuntimeManager } from './server/manager.js';
 import { PerceptionManager } from './server/perception/manager.js';
+import { ContextMemoryEngine } from './server/context_memory/manager.js';
 import type { ProviderId } from './src/types/runtime.js';
 import type { ScreenCaptureRequest, CameraCaptureRequest, VoiceTranscriptionRequest } from './src/types/perception.js';
+import type { MemoryType } from './src/types/context_memory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,8 +33,8 @@ app.use((_req, res, next) => {
 });
 
 const PROJECT_NAME = 'NEXUS EDGE';
-const VERSION = '0.3.0';
-const PHASE = 'Phase 3 - Multimodal Perception';
+const VERSION = '0.4.0';
+const PHASE = 'Phase 4 - Context Intelligence & Memory';
 const TAGLINE = "Understand what you're doing. Get intelligent help. Keep your data private.";
 
 // Instantiate Hardware-Aware AI Runtime Manager (Phase 2)
@@ -43,6 +45,9 @@ runtimeManager.initialize().catch((err) => {
 
 // Instantiate Multimodal Perception Manager (Phase 3)
 const perceptionManager = PerceptionManager.getInstance();
+
+// Instantiate Context Intelligence & Memory Engine (Phase 4)
+const contextMemoryEngine = ContextMemoryEngine.getInstance();
 
 // 1. Health check
 app.get('/api/v1/health', (_req, res) => {
@@ -106,6 +111,9 @@ app.get('/api/v1/system', (_req, res) => {
 // 3. Current working context
 app.get('/api/v1/context', (_req, res) => {
   const status = runtimeManager.getRuntimeStatus();
+  const session = contextMemoryEngine.getSession();
+  const activeTask = contextMemoryEngine.getActiveTask();
+
   res.json({
     project: PROJECT_NAME,
     status: status.runtime_state === 'READY' ? 'Ready' : status.runtime_state,
@@ -115,6 +123,8 @@ app.get('/api/v1/context', (_req, res) => {
     active_sources: perceptionManager.getAllContexts().length,
     phase: PHASE,
     active_model: status.active_model,
+    active_task: activeTask ? activeTask.title : null,
+    session_id: session.session_id,
   });
 });
 
@@ -259,12 +269,10 @@ app.post('/api/v1/runtime/benchmark', async (req, res) => {
 // PHASE 3 MULTIMODAL PERCEPTION APIS
 // ----------------------------------------------------
 
-// 1. Perception Status
 app.get('/api/v1/perception/status', (_req, res) => {
   res.json(perceptionManager.getStatus());
 });
 
-// 2. Text Perception
 app.post('/api/v1/perception/text', (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) {
@@ -275,7 +283,6 @@ app.post('/api/v1/perception/text', (req, res) => {
   res.json({ success: true, context });
 });
 
-// 3. Screen Perception (Explicit single frame)
 app.post('/api/v1/perception/screen', async (req, res) => {
   try {
     const body: ScreenCaptureRequest = req.body;
@@ -291,7 +298,6 @@ app.post('/api/v1/perception/screen', async (req, res) => {
   }
 });
 
-// 4. Camera Perception (Explicit single frame)
 app.post('/api/v1/perception/camera', async (req, res) => {
   try {
     const body: CameraCaptureRequest = req.body;
@@ -307,7 +313,6 @@ app.post('/api/v1/perception/camera', async (req, res) => {
   }
 });
 
-// 5. Voice Perception (Push-to-talk transcription)
 app.post('/api/v1/perception/voice', (req, res) => {
   try {
     const body: VoiceTranscriptionRequest = req.body;
@@ -323,7 +328,6 @@ app.post('/api/v1/perception/voice', (req, res) => {
   }
 });
 
-// 6. Document Perception (Upload & safe local text/schema extraction)
 app.post('/api/v1/perception/document', async (req, res) => {
   try {
     const filename = req.body?.filename;
@@ -340,7 +344,6 @@ app.post('/api/v1/perception/document', async (req, res) => {
       fs.mkdirSync(tmpDir, { recursive: true });
     }
 
-    // Write transient file safely
     const safeFilename = `${Date.now()}-${path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     const filePath = path.join(tmpDir, safeFilename);
 
@@ -351,7 +354,6 @@ app.post('/api/v1/perception/document', async (req, res) => {
       const context = await perceptionManager.processDocument(filePath, filename, buffer.length, mimeType);
       res.json({ success: true, context });
     } finally {
-      // Clean up temporary file immediately: Privacy-First Principle
       fs.promises.unlink(filePath).catch(() => {});
     }
   } catch (err: unknown) {
@@ -360,7 +362,6 @@ app.post('/api/v1/perception/document', async (req, res) => {
   }
 });
 
-// 7. Get All Captured Contexts
 app.get('/api/v1/perception/context', (_req, res) => {
   res.json({
     contexts: perceptionManager.getAllContexts(),
@@ -368,7 +369,6 @@ app.get('/api/v1/perception/context', (_req, res) => {
   });
 });
 
-// 8. Merge Contexts into Unified Multimodal Context
 app.post('/api/v1/perception/context/merge', (req, res) => {
   const contextIds: string[] = Array.isArray(req.body?.context_ids) ? req.body.context_ids : [];
   const primaryQuery = req.body?.primary_query || '';
@@ -376,7 +376,123 @@ app.post('/api/v1/perception/context/merge', (req, res) => {
   res.json({ success: true, unified_context: merged });
 });
 
-// 9. Unified Assistant Query Handler (Phase 1 UI + Phase 2 Runtime + Phase 3 Multimodal Context)
+// ----------------------------------------------------
+// PHASE 4 CONTEXT INTELLIGENCE & MEMORY APIS
+// ----------------------------------------------------
+
+// 1. Context Status
+app.get('/api/v1/context/status', async (_req, res) => {
+  const status = await contextMemoryEngine.getStatus();
+  res.json(status);
+});
+
+// 2. Current Session
+app.get('/api/v1/context/session', (_req, res) => {
+  res.json({ session: contextMemoryEngine.getSession() });
+});
+
+app.post('/api/v1/context/session', (req, res) => {
+  const title = req.body?.title || 'New Workspace Session';
+  const session = contextMemoryEngine.resetSession(title);
+  res.json({ session });
+});
+
+// 3. Active Task Management
+app.get('/api/v1/tasks/current', (_req, res) => {
+  res.json({ active_task: contextMemoryEngine.getActiveTask() });
+});
+
+app.post('/api/v1/tasks', (req, res) => {
+  const title = req.body?.title;
+  const description = req.body?.description || 'User-initiated task';
+  if (!title) {
+    res.status(400).json({ error: 'Task title is required' });
+    return;
+  }
+  const task = contextMemoryEngine.setActiveTask(title, description);
+  res.json({ active_task: task });
+});
+
+app.delete('/api/v1/tasks/current', (_req, res) => {
+  contextMemoryEngine.clearActiveTask();
+  res.json({ success: true, message: 'Active task cleared.' });
+});
+
+// 4. Memory List & Search
+app.get('/api/v1/memory', async (req, res) => {
+  const memoryType = req.query.type as MemoryType | undefined;
+  const memories = await contextMemoryEngine.getRepository().list({
+    memory_type: memoryType,
+  });
+  res.json({ memories, total: memories.length });
+});
+
+app.post('/api/v1/memory', async (req, res) => {
+  const content = req.body?.content;
+  const memoryType = (req.body?.memory_type as MemoryType) || 'PROJECT';
+  const summary = req.body?.summary;
+
+  if (!content) {
+    res.status(400).json({ error: 'Memory content is required' });
+    return;
+  }
+
+  const result = await contextMemoryEngine.evaluateAndStoreMemory({
+    content,
+    summary,
+    memory_type: memoryType,
+    source: 'user_explicit',
+    user_controlled: true,
+    reason: 'Saved explicitly by user in Memory Center',
+  });
+
+  if (!result.stored) {
+    res.status(400).json({ error: result.reason });
+    return;
+  }
+
+  res.json({ success: true, memory: result.memory, reason: result.reason });
+});
+
+app.post('/api/v1/memory/search', async (req, res) => {
+  const query = req.body?.query || '';
+  const results = await contextMemoryEngine.getRetrievalEngine().retrieve({
+    query,
+    limit: 10,
+  });
+  res.json({
+    query,
+    total_found: results.length,
+    retrieval_strategy: 'Deterministic Multi-Factor Relevance Ranking',
+    memories: results,
+  });
+});
+
+app.delete('/api/v1/memory/session', async (_req, res) => {
+  const session = contextMemoryEngine.getSession();
+  const count = await contextMemoryEngine.getRepository().deleteBySession(session.session_id);
+  res.json({ success: true, deleted_count: count });
+});
+
+app.delete('/api/v1/memory/project', async (_req, res) => {
+  const session = contextMemoryEngine.getSession();
+  const count = await contextMemoryEngine.getRepository().deleteByProject(session.project_id);
+  res.json({ success: true, deleted_count: count });
+});
+
+app.delete('/api/v1/memory/:id', async (req, res) => {
+  const memoryId = req.params.id;
+  const deleted = await contextMemoryEngine.getRepository().delete(memoryId);
+  if (!deleted) {
+    res.status(404).json({ error: `Memory '${memoryId}' not found.` });
+    return;
+  }
+  res.json({ success: true, memory_id: memoryId });
+});
+
+// ----------------------------------------------------
+// INTEGRATED MULTIMODAL + CONTEXT + RUNTIME INFERENCE
+// ----------------------------------------------------
 app.post('/api/v1/assistant/query', async (req, res) => {
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
   const contextIds: string[] = Array.isArray(req.body?.context_ids) ? req.body.context_ids : [];
@@ -387,19 +503,28 @@ app.post('/api/v1/assistant/query', async (req, res) => {
   }
 
   try {
-    // Merge multimodal contexts if provided
-    let promptForEngine = message;
+    // 1. Process via Phase 3 Multimodal Perception
+    let primaryInputText = message;
     let multimodalSummary: string | undefined;
 
     if (contextIds.length > 0) {
       const mergedContext = perceptionManager.mergeContexts(contextIds, message);
-      promptForEngine = mergedContext.merged_text_representation;
+      primaryInputText = mergedContext.merged_text_representation;
       multimodalSummary = `Combined ${mergedContext.active_modalities.length} modalities: [${mergedContext.active_modalities.join(', ')}]`;
     }
 
-    // Execute via Phase 2 Hardware-Aware Runtime Engine
+    // 2. Process via Phase 4 Context Aggregator & Memory Retrieval
+    const canonicalContext = await contextMemoryEngine.aggregateContext({
+      user_input: primaryInputText,
+      modality: contextIds.length > 0 ? 'screen' : 'text',
+    });
+
+    // 3. Construct bounded Context Window
+    const contextWindow = contextMemoryEngine.constructContextWindow(canonicalContext);
+
+    // 4. Pass Context Window to Phase 2 Hardware-Aware AI Runtime
     const inferenceResult = await runtimeManager.infer({
-      input: promptForEngine,
+      input: contextWindow.formatted_prompt,
       requestedProvider: 'auto',
     });
 
@@ -413,6 +538,15 @@ app.post('/api/v1/assistant/query', async (req, res) => {
       fallback_used: inferenceResult.fallback_used,
       fallback_reason: inferenceResult.fallback_reason,
       multimodal_context: multimodalSummary,
+      context_understanding: {
+        category: canonicalContext.category,
+        intent: canonicalContext.intent,
+        active_task: contextWindow.active_task ? contextWindow.active_task.title : null,
+        entities: canonicalContext.entities.map((e) => e.name),
+        topics: canonicalContext.topics.map((t) => t.topic),
+        retrieved_memories_count: contextWindow.retrieved_memories.length,
+        estimated_tokens: contextWindow.estimated_tokens,
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (err: unknown) {
@@ -428,7 +562,7 @@ app.post('/api/v1/assistant/query', async (req, res) => {
 });
 
 // Root API info endpoint
-app.get('/api/info', (_req, res) => {
+app.get('/api/info', async (_req, res) => {
   res.json({
     service: PROJECT_NAME,
     tagline: TAGLINE,
@@ -437,6 +571,7 @@ app.get('/api/info', (_req, res) => {
     status: 'online',
     runtime: runtimeManager.getRuntimeStatus(),
     perception: perceptionManager.getStatus(),
+    context_memory: await contextMemoryEngine.getStatus(),
   });
 });
 

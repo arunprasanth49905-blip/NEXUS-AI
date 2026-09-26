@@ -51,6 +51,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       if (e.altKey) {
         if (e.key === '1') { e.preventDefault(); onNavigate('home'); }
         else if (e.key === '2') { e.preventDefault(); onNavigate('ask-nexus'); }
+        else if (e.key.toLowerCase() === 'm') { e.preventDefault(); onNavigate('memory'); }
         else if (e.key === '3') { e.preventDefault(); onNavigate('knowledge'); }
         else if (e.key === '4') { e.preventDefault(); onNavigate('activity'); }
         else if (e.key === '5') { e.preventDefault(); onNavigate('settings'); }

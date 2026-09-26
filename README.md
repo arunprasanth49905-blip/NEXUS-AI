@@ -6,14 +6,19 @@ NEXUS EDGE is a context-aware edge AI workspace designed to operate with strict 
 
 ---
 
-## Architecture Milestone: Phase 3 — Multimodal Perception Engine
+## Architecture Milestone: Phase 4 — Context Intelligence & Memory Engine
 
-Phase 3 upgrades NEXUS EDGE with an input perception layer across:
-1. **TEXT** (Typed and pasted inquiries)
-2. **SCREEN** (Explicit user-shared window/monitor frame capture via `getDisplayMedia`)
-3. **CAMERA** (User-controlled on-demand snapshot via `getUserMedia` with live local preview)
-4. **VOICE** (Push-to-talk speech recognition via Web Speech API)
-5. **DOCUMENTS** (Local parsing for PDF, DOCX, TXT, MD, and CSV)
+Phase 4 equips NEXUS EDGE with contextual understanding and responsible memory retention:
+1. **Context Aggregator & Classifier**: Standardizes multimodal inputs into canonical context, classifying intents (`ASK`, `EXPLAIN`, `DEBUG`, `CREATE`, etc.) and categories.
+2. **Active Task Manager**: Understands and anchors the user's current goal across interactions (e.g., *"Deploy React application"*, *"Resolve bundle failure"*).
+3. **Layered Memory Engine**:
+   - `SHORT_TERM`: Active context window items.
+   - `SESSION`: Ephemeral troubleshooting context cleared upon reset.
+   - `PROJECT`: Persistent project specifications and architecture rules.
+   - `LONG_TERM`: Explicit user-controlled preferences retained across sessions.
+4. **Secret Protection & Privacy Guard**: Automatically detects API keys, tokens, and private keys, preventing accidental persistence.
+5. **Deterministic Retrieval & Ranking**: Transparently retrieves relevant memories using multi-factor relevance (task match, project scope, session recency, and keyword overlap).
+6. **Bounded Context Window**: Assembles prompt payloads within strict token boundaries passed directly into the Phase 2 AI Runtime Engine.
 
 ```
                     USER
@@ -23,80 +28,59 @@ Phase 3 upgrades NEXUS EDGE with an input perception layer across:
         +-------------+-------------+
                       |
        +--------------+--------------+
-       |       PERCEPTION ENGINE     |
+       |       PERCEPTION ENGINE     | (Phase 3)
        +--------------+--------------+
-          |      |      |      | 
-        TEXT   SCREEN CAMERA VOICE
-                          |
-                      DOCUMENT
-                          |
-                          ↓
-                 NORMALIZATION
-                          |
-                          ↓
-               CONTEXT EXTRACTION
-                          |
-                          ↓
-           UNIFIED MULTIMODAL CONTEXT
-                          |
-                          ↓
-                 PHASE 2 RUNTIME
+                      |
+       +--------------+--------------+
+       |   CONTEXT INTELLIGENCE      | (Phase 4)
+       |   - Intent & Category       |
+       |   - Entities & Topics       |
+       |   - Active Task Anchor      |
+       +--------------+--------------+
+                      |
+       +--------------+--------------+
+       |        MEMORY ENGINE        | (Phase 4)
+       |   - Privacy Guard (Secrets) |
+       |   - Storage (SQLite)        |
+       |   - Deterministic Retrieval |
+       +--------------+--------------+
+                      |
+                      ↓
+               CONTEXT WINDOW
+                      |
+                      ↓
+               PHASE 2 RUNTIME
             (QNN/NPU → GPU → CPU)
-                          |
-                          ↓
-                   AI INFERENCE
+                      |
+                      ↓
+                 AI INFERENCE
 ```
-
-### Core Perception Components
-
-1. **Privacy Guard (`server/perception/privacy.ts`)**:
-   - Strictly enforces user-initiated capture.
-   - Enforces zero persistent storage for raw audio, camera frames, and screen captures.
-   - Validates file extensions and restricts document sizes (25 MB max).
-   - Sanitizes and purges transient memory immediately upon context extraction.
-
-2. **Perception Providers (`server/perception/providers.ts`)**:
-   - **`LocalOCRProvider`**: Truthful extraction. Returns `NOT_AVAILABLE` when native binaries are absent; avoids fabricated text.
-   - **`LocalVisionProvider`**: Inspects authentic image dimensions and structural headers without fake object/scene detection.
-   - **`SpeechProvider`**: Native browser SpeechRecognition push-to-talk abstraction with graceful browser fallback.
-
-3. **Document Extractor (`server/perception/extractor.ts`)**:
-   - Parses CSV into column schemas, row counts, and sample records.
-   - Extracts Markdown headings, structure, and word counts.
-   - Inspects PDF text streams safely without heavy binary bloat.
-   - Parses DOCX paragraph XML structures.
-
-4. **Perception Manager (`server/perception/manager.ts`)**:
-   - Normalizes all input modalities into a unified schema (`NexusContextObject`).
-   - Merges multiple concurrent modalities into a cohesive prompt representation passed into the Phase 2 Hardware-Aware Runtime.
-
-5. **User Interface Integration (`src/pages/AskNexus.tsx`)**:
-   - Push-to-talk microphone button (`Listening...` / `Transcribed`).
-   - Screen capture button with browser window picker.
-   - Camera modal with start, live preview, on-demand snapshot, and stop controls.
-   - Local document file attachment.
-   - `ContextPreviewBar` displaying active attached modalities before sending.
 
 ---
 
-## API Endpoints (Phases 1, 2, & 3)
+## API Endpoints (Phases 1, 2, 3 & 4)
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/health` | System health, service status, and active provider |
 | `GET` | `/api/v1/system` | Authentic host hardware specs and acceleration state |
-| `GET` | `/api/v1/context` | Active context, boundary state, and model reference |
-| `POST` | `/api/v1/assistant/query` | Unified assistant query accepting text + multimodal context IDs |
+| `GET` | `/api/v1/context` | Active context, session ID, and active task goal |
+| `POST` | `/api/v1/assistant/query` | Unified inference query with context window & memory retrieval |
 | `GET` | `/api/v1/runtime/status` | Comprehensive runtime state, selection, and explanation |
 | `POST` | `/api/v1/runtime/benchmark` | Iterative benchmark on selected provider |
 | `GET` | `/api/v1/perception/status` | Availability status for text, screen, camera, voice, doc, OCR, vision |
-| `POST` | `/api/v1/perception/text` | Normalize typed/pasted text into context |
-| `POST` | `/api/v1/perception/screen` | Ingest and inspect user screen capture frame |
-| `POST` | `/api/v1/perception/camera` | Ingest and inspect on-demand camera snapshot |
-| `POST` | `/api/v1/perception/voice` | Ingest transcribed push-to-talk speech |
-| `POST` | `/api/v1/perception/document` | Safe local upload and structural text extraction |
-| `GET` | `/api/v1/perception/context` | Retrieve all active session perception contexts |
-| `POST` | `/api/v1/perception/context/merge` | Merge multiple contexts into unified multimodal context |
+| `GET` | `/api/v1/context/status` | Status of Context Engine, Active Session, and Memory Repository |
+| `GET` | `/api/v1/context/session` | Get active session metadata |
+| `POST` | `/api/v1/context/session` | Reset or create workspace session |
+| `GET` | `/api/v1/tasks/current` | Retrieve active task goal |
+| `POST` | `/api/v1/tasks` | Explicitly set active task goal |
+| `DELETE` | `/api/v1/tasks/current` | Clear current active task goal |
+| `GET` | `/api/v1/memory` | List stored memories with optional `?type=` filter |
+| `POST` | `/api/v1/memory` | Explicitly retain new memory (audited by Privacy Guard) |
+| `POST` | `/api/v1/memory/search` | Retrieve memories using deterministic ranking |
+| `DELETE` | `/api/v1/memory/:id` | Permanently delete individual memory |
+| `DELETE` | `/api/v1/memory/session` | Clear ephemeral session memories |
+| `DELETE` | `/api/v1/memory/project` | Clear project-scoped memories |
 
 ---
 

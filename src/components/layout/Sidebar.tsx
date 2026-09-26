@@ -2,6 +2,7 @@ import React from 'react';
 import { 
   Home, 
   MessageSquare, 
+  Bookmark,
   BookOpen, 
   Activity, 
   Settings, 
@@ -31,6 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: Array<{ id: NavPage; label: string; icon: React.ReactNode; shortcut: string }> = [
     { id: 'home', label: 'Home', icon: <Home size={18} />, shortcut: 'Alt+1' },
     { id: 'ask-nexus', label: 'Ask NEXUS', icon: <MessageSquare size={18} />, shortcut: 'Alt+2' },
+    { id: 'memory', label: 'Memory', icon: <Bookmark size={18} />, shortcut: 'Alt+M' },
     { id: 'knowledge', label: 'Knowledge', icon: <BookOpen size={18} />, shortcut: 'Alt+3' },
     { id: 'activity', label: 'Activity', icon: <Activity size={18} />, shortcut: 'Alt+4' },
     { id: 'settings', label: 'Settings', icon: <Settings size={18} />, shortcut: 'Alt+5' },

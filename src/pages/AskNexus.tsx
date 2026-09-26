@@ -19,6 +19,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
 import { CameraModal } from '../components/ui/CameraModal';
 import { ContextPreviewBar } from '../components/ui/ContextPreviewBar';
+import { ContextPanel } from '../components/ui/ContextPanel';
 import type { ChatMessage, ContextInfo, NexusContextObject } from '../types';
 import { api } from '../services/api';
 import { PerceptionService } from '../services/perception';
@@ -52,26 +53,37 @@ export const AskNexus: React.FC<AskNexusProps> = ({
   const [isListening, setIsListening] = useState(false);
   const speechRecognitionRef = useRef<any>(null);
 
+  // Phase 4 Context & Memory State
+  const [activeTask, setActiveTask] = useState<string | null>(context.active_task || null);
+  const [lastContextUnderstanding, setLastContextUnderstanding] = useState<{
+    category?: string;
+    intent?: string;
+    entities?: string[];
+    topics?: string[];
+    retrieved_memories_count?: number;
+    estimated_tokens?: number;
+  }>({});
+
   const starterExamples = [
     {
       title: 'Analyze System Architecture',
-      desc: 'Evaluate Phase 1-3 edge capabilities and runtime layer',
-      prompt: 'Analyze how the Phase 2 runtime engine interacts with Phase 3 multimodal perception.',
+      desc: 'Evaluate Phase 1-4 edge capabilities and runtime layer',
+      prompt: 'Analyze how the Phase 2 runtime engine interacts with Phase 4 context intelligence and memory.',
     },
     {
-      title: 'Hardware Acceleration Audit',
-      desc: 'Verify truthful Snapdragon NPU & GPU detection rules',
-      prompt: 'Explain the difference between detected GPU hardware and active GPU inference provider.',
+      title: 'Fix Deployment Failure',
+      desc: 'Anchor active task goal and track build error context',
+      prompt: 'Help me fix my Vercel build error: Cannot find name useCallback in CameraModal.tsx.',
+    },
+    {
+      title: 'Remember Project Stack',
+      desc: 'Store enduring project constraints in memory',
+      prompt: 'Remember that our project uses React 19, TypeScript, and SQLite for local persistent memory.',
     },
     {
       title: 'Privacy Perimeter Guardrails',
-      desc: 'Review zero-cloud telemetry and on-demand capture policy',
-      prompt: 'How does NEXUS EDGE prevent background surveillance when using camera and screen?',
-    },
-    {
-      title: 'Multimodal Context Merging',
-      desc: 'Test combining screen captures, files, and queries',
-      prompt: 'Explain how text, screen frames, and uploaded documents merge into a unified context.',
+      desc: 'Review zero-cloud telemetry and secret protection rules',
+      prompt: 'How does NEXUS EDGE prevent secret keys and background recordings from entering memory?',
     },
   ];
 
@@ -97,6 +109,13 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     try {
       // Call backend API with query and attached multimodal context IDs
       const result = await api.sendAssistantQuery(text, currentContextIds);
+
+      if (result.context_understanding) {
+        setLastContextUnderstanding(result.context_understanding);
+        if (result.context_understanding.active_task) {
+          setActiveTask(result.context_understanding.active_task);
+        }
+      }
       
       const assistantMessage: ChatMessage = {
         id: `msg-nexus-${Date.now()}`,
@@ -109,17 +128,18 @@ export const AskNexus: React.FC<AskNexusProps> = ({
         fallbackUsed: result.fallback_used,
         fallbackReason: result.fallback_reason,
         multimodalContext: result.multimodal_context,
+        contextUnderstanding: result.context_understanding,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch {
-      // Graceful truthful Phase 3 response when running in standalone mode
+      // Graceful truthful Phase 4 response when running in standalone mode
       const assistantMessage: ChatMessage = {
         id: `msg-nexus-${Date.now()}`,
         role: 'assistant',
         content: (
           `NEXUS EDGE received query: "${text}".\n\n` +
-          `[Phase 3 Multimodal Perception Active]\n` +
+          `[Phase 4 Context Intelligence & Memory Active]\n` +
           `Local hardware-aware engine is active in standalone CPU mode.\n\n` +
           `Active Context: ${context.project} | Privacy: ${context.privacy} (Local perimeter).`
         ),
@@ -165,9 +185,17 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     onAddToast('Conversation reset', 'Chat history cleared for this session.', 'info');
   };
 
-  // --- Multimodal Action Handlers ---
+  const handleClearActiveTask = async () => {
+    try {
+      await api.clearActiveTask();
+      setActiveTask(null);
+      onAddToast('Task Cleared', 'Active goal reset for current session.', 'info');
+    } catch {
+      setActiveTask(null);
+    }
+  };
 
-  // 1. Screen Capture Handler
+  // --- Multimodal Action Handlers ---
   const handleTriggerScreenCapture = async () => {
     try {
       setIsScreenSharing(true);
@@ -183,12 +211,10 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     }
   };
 
-  // 2. Camera Capture Modal Trigger
   const handleTriggerCamera = () => {
     setIsCameraModalOpen(true);
   };
 
-  // 3. Document File Selection Handler
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -206,7 +232,6 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     }
   };
 
-  // 4. Voice Push-to-Talk Handler (Web Speech API)
   const handleToggleVoice = () => {
     if (isListening) {
       if (speechRecognitionRef.current) {
@@ -239,7 +264,6 @@ export const AskNexus: React.FC<AskNexusProps> = ({
           try {
             const ctx = await PerceptionService.submitVoiceTranscript(transcript);
             setAttachedContexts((prev) => [...prev, ctx]);
-            // Pre-fill input value if empty
             setInputVal((prev) => (prev ? `${prev} ${transcript}` : transcript));
             onAddToast('Voice Transcribed', `"${transcript.slice(0, 30)}..." attached.`, 'success');
           } catch {
@@ -274,7 +298,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     <div className="nexus-ask-page animate-fade-in">
       <PageHeader
         title="ASK NEXUS"
-        subtitle="Context-aware reasoning across text, screen, camera, voice, and documents."
+        subtitle="Context-aware reasoning across text, screen, camera, voice, documents, and memory."
         badge={
           <span className="nexus-context-tag">
             <ShieldCheck size={12} className="text-cyan" />
@@ -295,6 +319,19 @@ export const AskNexus: React.FC<AskNexusProps> = ({
         }
       />
 
+      {/* Phase 4 Context Inspector Panel */}
+      <ContextPanel
+        activeTask={activeTask}
+        category={lastContextUnderstanding.category}
+        intent={lastContextUnderstanding.intent}
+        entities={lastContextUnderstanding.entities}
+        topics={lastContextUnderstanding.topics}
+        retrievedMemoriesCount={lastContextUnderstanding.retrieved_memories_count}
+        sourcesCount={attachedContexts.length}
+        estimatedTokens={lastContextUnderstanding.estimated_tokens}
+        onClearTask={handleClearActiveTask}
+      />
+
       {/* Conversation Thread Area */}
       <div className="nexus-ask-conversation-area" role="log" aria-label="Conversation with NEXUS">
         {messages.length === 0 ? (
@@ -305,7 +342,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
               </div>
               <h2 className="nexus-ask-empty-title">What can I help you understand?</h2>
               <p className="nexus-ask-empty-subtitle">
-                Ask questions directly, attach an application window, capture a camera frame, or inspect local documents.
+                Ask questions directly, attach an application window, capture a camera frame, inspect local documents, or recall project memory.
               </p>
             </div>
 
@@ -329,7 +366,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
             <div className="nexus-phase-banner">
               <Info size={14} className="nexus-phase-info-icon" />
               <span className="nexus-phase-text">
-                <strong>Phase 3 Multimodal Perception:</strong> User-controlled on-demand capture for screen, camera, voice, and documents. Zero continuous recording. Zero cloud telemetry.
+                <strong>Phase 4 Context & Memory:</strong> Tracks active goals, anchors session context, extracts entities, and transparently retrieves project memory before runtime inference.
               </span>
             </div>
           </div>
@@ -357,6 +394,9 @@ export const AskNexus: React.FC<AskNexusProps> = ({
                       )}
                       {msg.multimodalContext && (
                         <span className="nexus-msg-mode-tag text-purple">{msg.multimodalContext}</span>
+                      )}
+                      {msg.contextUnderstanding?.active_task && (
+                        <span className="nexus-msg-mode-tag text-amber">Goal: {msg.contextUnderstanding.active_task}</span>
                       )}
                       <span className="nexus-msg-time">{msg.timestamp}</span>
                     </div>
@@ -502,14 +542,14 @@ export const AskNexus: React.FC<AskNexusProps> = ({
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type your message or combine with screen, camera, voice, and documents..."
+            placeholder="Type your message or combine with screen, camera, voice, documents, and memory..."
             rows={2}
             aria-label="Ask NEXUS message"
           />
 
           <div className="nexus-composer-footer-row">
             <span className="nexus-composer-hint">
-              Local edge processing • Zero cloud surveillance • Strict privacy guard
+              Local edge processing • Context-aware memory • Secret protection guard
             </span>
 
             <div className="nexus-composer-action-btns">

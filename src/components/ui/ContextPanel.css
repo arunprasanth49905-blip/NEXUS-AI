@@ -1,0 +1,168 @@
+.nexus-context-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+.nexus-context-panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  cursor: pointer;
+  background: var(--bg-surface-elevated);
+  user-select: none;
+}
+
+.nexus-context-panel-bar:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nexus-context-summary-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+
+.nexus-context-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.nexus-task-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  color: var(--status-warning);
+  font-weight: 600;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexus-context-neutral-state {
+  color: var(--text-tertiary);
+}
+
+.nexus-context-quick-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nexus-micro-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+}
+
+.nexus-context-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.nexus-context-expanded-drawer {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.nexus-context-drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+
+@media (max-width: 900px) {
+  .nexus-context-drawer-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .nexus-context-drawer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nexus-context-drawer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nexus-drawer-subhead {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.nexus-drawer-text {
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.nexus-drawer-action-link {
+  background: none;
+  border: none;
+  color: var(--status-error);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 2px;
+  text-align: left;
+  text-decoration: underline;
+}
+
+.nexus-drawer-prop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.nexus-drawer-tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.nexus-topic-badge {
+  font-size: 10px;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  color: #c084fc;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+}
+
+.nexus-entity-badge {
+  font-size: 10px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+}
