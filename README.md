@@ -2,155 +2,115 @@
 
 > **"Understand what you're doing. Get intelligent help. Keep your data private."**
 
-NEXUS EDGE is a context-aware edge AI workspace designed to operate with strict local-first boundaries, truthful hardware disclosures, and zero remote cloud telemetry.
+NEXUS EDGE is a context-aware edge AI workspace designed to operate with strict local-first boundaries, truthful hardware disclosures, multimodal perception, and zero remote cloud telemetry.
 
 ---
 
-## Architecture Milestone: Phase 2 — AI Runtime Engine / Hardware-Aware Inference
+## Architecture Milestone: Phase 3 — Multimodal Perception Engine
 
-Phase 2 builds a production-grade, hardware-aware execution layer that answers: **"Where should this AI task run?"**
+Phase 3 upgrades NEXUS EDGE with an input perception layer across:
+1. **TEXT** (Typed and pasted inquiries)
+2. **SCREEN** (Explicit user-shared window/monitor frame capture via `getDisplayMedia`)
+3. **CAMERA** (User-controlled on-demand snapshot via `getUserMedia` with live local preview)
+4. **VOICE** (Push-to-talk speech recognition via Web Speech API)
+5. **DOCUMENTS** (Local parsing for PDF, DOCX, TXT, MD, and CSV)
 
 ```
-USER TASK
-   ↓
-TASK & MODEL REQUIREMENTS
-   ↓
-RUNTIME MANAGER
-   ↓
-HARDWARE DETECTOR
-   ↓
-PROVIDER REGISTRY
-┌─────────────────────────────────┐
-│ 1. Qualcomm® QNN / Snapdragon® │
-│ 2. GPU (CUDA / DirectML)       │
-│ 3. CPU (Native Host Baseline)   │
-└─────────────────────────────────┘
-   ↓
-MODEL MANAGER & COMPATIBILITY
-   ↓
-RUNTIME SELECTION (QNN → GPU → CPU)
-   ↓
-INFERENCE ENGINE
-   ↓
-ACTUAL MEASURED TELEMETRY
-   ↓
-RESULT + EXPLANATION
+                    USER
+                      |
+        +-------------+-------------+
+        |       MULTIMODAL INPUT    |
+        +-------------+-------------+
+                      |
+       +--------------+--------------+
+       |       PERCEPTION ENGINE     |
+       +--------------+--------------+
+          |      |      |      | 
+        TEXT   SCREEN CAMERA VOICE
+                          |
+                      DOCUMENT
+                          |
+                          ↓
+                 NORMALIZATION
+                          |
+                          ↓
+               CONTEXT EXTRACTION
+                          |
+                          ↓
+           UNIFIED MULTIMODAL CONTEXT
+                          |
+                          ↓
+                 PHASE 2 RUNTIME
+            (QNN/NPU → GPU → CPU)
+                          |
+                          ↓
+                   AI INFERENCE
 ```
 
-### Core Architecture Components
+### Core Perception Components
 
-1. **Hardware Detector (`server/detector.ts`)**:
-   - Inspects host processor, architecture, CPU physical cores, and logical threads.
-   - Detects Snapdragon processor signatures without false positives.
-   - Distinguishes between **GPU hardware presence** and **accelerated inference runtime availability**.
-   - Validates Qualcomm QNN SDK paths and dynamic libraries (`libQnnHtp.so` / `QnnHtp.dll`).
+1. **Privacy Guard (`server/perception/privacy.ts`)**:
+   - Strictly enforces user-initiated capture.
+   - Enforces zero persistent storage for raw audio, camera frames, and screen captures.
+   - Validates file extensions and restricts document sizes (25 MB max).
+   - Sanitizes and purges transient memory immediately upon context extraction.
 
-2. **Runtime Providers (`server/providers/`)**:
-   - **`CPUProvider` (`server/providers/cpu.ts`)**: Reliable baseline execution engine. Executes real semantic context classification, intent detection, and measures authentic clock cycles and latency.
-   - **`GPUProvider` (`server/providers/gpu.ts`)**: Honest GPU detection. Returns `NOT_AVAILABLE` or `NOT_CONFIGURED` unless native compute runtimes are initialized.
-   - **`QNNProvider` (`server/providers/qnn.ts`)**: Snapdragon Hexagon NPU provider. Returns `NOT_AVAILABLE` on x86_64 machines without Qualcomm hardware.
+2. **Perception Providers (`server/perception/providers.ts`)**:
+   - **`LocalOCRProvider`**: Truthful extraction. Returns `NOT_AVAILABLE` when native binaries are absent; avoids fabricated text.
+   - **`LocalVisionProvider`**: Inspects authentic image dimensions and structural headers without fake object/scene detection.
+   - **`SpeechProvider`**: Native browser SpeechRecognition push-to-talk abstraction with graceful browser fallback.
 
-3. **Runtime Selection Engine (`server/selection.ts`)**:
-   - Evaluates provider chain: `QNN → GPU → CPU`.
-   - Selects only genuinely available, initialized, and model-compatible providers.
-   - Transparently exposes `fallback_used` and `fallback_reason`.
+3. **Document Extractor (`server/perception/extractor.ts`)**:
+   - Parses CSV into column schemas, row counts, and sample records.
+   - Extracts Markdown headings, structure, and word counts.
+   - Inspects PDF text streams safely without heavy binary bloat.
+   - Parses DOCX paragraph XML structures.
 
-4. **Model Manager (`server/models.ts`)**:
-   - Manages model lifecycle (`DISCOVERED → VALIDATING → READY → UNLOADED`).
-   - Supports ONNX, GGUF, TorchScript, and Qualcomm QNN DLC model containers.
+4. **Perception Manager (`server/perception/manager.ts`)**:
+   - Normalizes all input modalities into a unified schema (`NexusContextObject`).
+   - Merges multiple concurrent modalities into a cohesive prompt representation passed into the Phase 2 Hardware-Aware Runtime.
 
-5. **Runtime Explanation Engine**:
-   - Answers: *"Why did NEXUS select this runtime?"* with verifiable facts based on current hardware state.
-
-6. **Benchmarking & Telemetry**:
-   - Computes authentic inference latency (min, max, average) across test iterations.
-   - Zero synthetic benchmark generation or fabricated TOPS.
-
----
-
-## Truthful Hardware Disclosure Policy
-
-In accordance with strict technical integrity standards:
-- **No Synthetic Benchmarks**: Latency metrics are measured directly from execution using `performance.now()`.
-- **No Fabricated Acceleration**: Snapdragon NPU and Qualcomm QNN are never reported as active unless native libraries and hardware are detected.
-- **Normal PC Compatibility**: On a standard Windows or Linux x86_64 computer, NEXUS EDGE truthfully reports:
-  - CPU: **READY**
-  - GPU: **NOT CONFIGURED** / **NOT AVAILABLE**
-  - QNN: **NOT DETECTED**
-  - Snapdragon: **NOT DETECTED**
-  - Active Provider: **CPU (Fallback)**
+5. **User Interface Integration (`src/pages/AskNexus.tsx`)**:
+   - Push-to-talk microphone button (`Listening...` / `Transcribed`).
+   - Screen capture button with browser window picker.
+   - Camera modal with start, live preview, on-demand snapshot, and stop controls.
+   - Local document file attachment.
+   - `ContextPreviewBar` displaying active attached modalities before sending.
 
 ---
 
-## API Endpoints (Phase 1 & Phase 2)
+## API Endpoints (Phases 1, 2, & 3)
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/health` | System health, service status, and active provider |
 | `GET` | `/api/v1/system` | Authentic host hardware specs and acceleration state |
 | `GET` | `/api/v1/context` | Active context, boundary state, and model reference |
-| `POST` | `/api/v1/assistant/query` | Primary assistant endpoint (executes hardware-aware inference) |
+| `POST` | `/api/v1/assistant/query` | Unified assistant query accepting text + multimodal context IDs |
 | `GET` | `/api/v1/runtime/status` | Comprehensive runtime state, selection, and explanation |
-| `GET` | `/api/v1/runtime/providers` | Status and capabilities for QNN, GPU, and CPU providers |
-| `GET` | `/api/v1/runtime/capabilities` | Detailed hardware acceleration feature matrix |
-| `GET` | `/api/v1/runtime/models` | Registered model metadata and supported provider targets |
-| `POST` | `/api/v1/runtime/models/load` | Load model into runtime memory |
-| `POST` | `/api/v1/runtime/models/unload` | Unload model from runtime memory |
-| `POST` | `/api/v1/runtime/select` | Test runtime provider selection against criteria |
-| `POST` | `/api/v1/inference` | Direct inference execution endpoint with telemetry |
-| `GET` | `/api/v1/runtime/telemetry` | Recent execution latency and memory usage log |
-| `POST` | `/api/v1/runtime/benchmark` | Run iterative benchmark on selected provider |
+| `POST` | `/api/v1/runtime/benchmark` | Iterative benchmark on selected provider |
+| `GET` | `/api/v1/perception/status` | Availability status for text, screen, camera, voice, doc, OCR, vision |
+| `POST` | `/api/v1/perception/text` | Normalize typed/pasted text into context |
+| `POST` | `/api/v1/perception/screen` | Ingest and inspect user screen capture frame |
+| `POST` | `/api/v1/perception/camera` | Ingest and inspect on-demand camera snapshot |
+| `POST` | `/api/v1/perception/voice` | Ingest transcribed push-to-talk speech |
+| `POST` | `/api/v1/perception/document` | Safe local upload and structural text extraction |
+| `GET` | `/api/v1/perception/context` | Retrieve all active session perception contexts |
+| `POST` | `/api/v1/perception/context/merge` | Merge multiple contexts into unified multimodal context |
 
 ---
 
-## Getting Started
+## Verification & Testing
 
-### 1. Installation
-
-```bash
-npm install
-```
-
-### 2. Environment Configuration
-
-Copy `.env.example` to `.env`:
-
-```bash
-cp .env.example .env
-```
-
-### 3. Run Development Server
-
-```bash
-npm run dev
-```
-
-Server starts on `http://0.0.0.0:3000`.
-
-### 4. Run Automated Test Suite
+Run all unit and integration test suites:
 
 ```bash
 npm test
 ```
 
-### 5. Production Build
+Build for production:
 
 ```bash
 npm run build
 npm start
 ```
-
----
-
-## Verification Checklist
-
-- [x] Phase 1 UI and routes preserved (Home, Ask NEXUS, Knowledge, Activity, Settings, Diagnostics)
-- [x] Honest hardware detection (zero fabricated Snapdragon or NPU claims on x86_64)
-- [x] Distinct GPU device vs GPU inference provider state
-- [x] QNN provider with Qualcomm SDK and library discovery
-- [x] Hierarchical runtime selection (`QNN → GPU → CPU`) with transparent fallback
-- [x] Model Manager with multi-format support
-- [x] "Why this runtime?" explanation card in UI
-- [x] Real iterative latency benchmarking (min/max/average)
-- [x] Automated test suite passing with 100% success
-- [x] Clean production build (`npm run build`)

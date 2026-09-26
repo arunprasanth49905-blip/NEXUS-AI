@@ -1,8 +1,11 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { RuntimeManager } from './server/manager.js';
+import { PerceptionManager } from './server/perception/manager.js';
 import type { ProviderId } from './src/types/runtime.js';
+import type { ScreenCaptureRequest, CameraCaptureRequest, VoiceTranscriptionRequest } from './src/types/perception.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,7 +14,9 @@ const app = express();
 const PORT = 3000;
 const HOST = '0.0.0.0';
 
-app.use(express.json());
+// Limit JSON payload up to 25MB for base64 screen/camera frames and file uploads
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // CORS configuration for local development / testing
 app.use((_req, res, next) => {
@@ -26,17 +31,20 @@ app.use((_req, res, next) => {
 });
 
 const PROJECT_NAME = 'NEXUS EDGE';
-const VERSION = '0.2.0';
-const PHASE = 'Phase 2 - AI Runtime Engine';
+const VERSION = '0.3.0';
+const PHASE = 'Phase 3 - Multimodal Perception';
 const TAGLINE = "Understand what you're doing. Get intelligent help. Keep your data private.";
 
-// Instantiate and initialize the Hardware-Aware AI Runtime Manager
+// Instantiate Hardware-Aware AI Runtime Manager (Phase 2)
 const runtimeManager = new RuntimeManager();
 runtimeManager.initialize().catch((err) => {
   console.error('Failed to initialize RuntimeManager:', err);
 });
 
-// 1. Health check (Phase 1 backwards compatibility + Phase 2 status)
+// Instantiate Multimodal Perception Manager (Phase 3)
+const perceptionManager = PerceptionManager.getInstance();
+
+// 1. Health check
 app.get('/api/v1/health', (_req, res) => {
   const runtimeStatus = runtimeManager.getRuntimeStatus();
   res.json({
@@ -51,7 +59,7 @@ app.get('/api/v1/health', (_req, res) => {
   });
 });
 
-// 2. System diagnostics (Phase 1 compatibility updated with honest detected hardware)
+// 2. System diagnostics
 app.get('/api/v1/system', (_req, res) => {
   const status = runtimeManager.getRuntimeStatus();
   const hw = status.hardware;
@@ -104,7 +112,7 @@ app.get('/api/v1/context', (_req, res) => {
     runtime: `${status.active_provider.toUpperCase()} (Available)`,
     privacy: 'Protected',
     boundary: 'Local-first edge perimeter',
-    active_sources: 0,
+    active_sources: perceptionManager.getAllContexts().length,
     phase: PHASE,
     active_model: status.active_model,
   });
@@ -114,12 +122,10 @@ app.get('/api/v1/context', (_req, res) => {
 // PHASE 2 RUNTIME ENGINE APIS
 // ----------------------------------------------------
 
-// GET /api/v1/runtime/status
 app.get('/api/v1/runtime/status', (_req, res) => {
   res.json(runtimeManager.getRuntimeStatus());
 });
 
-// GET /api/v1/runtime/providers
 app.get('/api/v1/runtime/providers', (_req, res) => {
   const providers = runtimeManager.getRegistry().getAll().map((p) => p.getInfo());
   res.json({
@@ -128,7 +134,6 @@ app.get('/api/v1/runtime/providers', (_req, res) => {
   });
 });
 
-// GET /api/v1/runtime/capabilities
 app.get('/api/v1/runtime/capabilities', (_req, res) => {
   const providers = runtimeManager.getRegistry().getAll();
   const caps: Record<string, unknown> = {};
@@ -146,7 +151,6 @@ app.get('/api/v1/runtime/capabilities', (_req, res) => {
   });
 });
 
-// GET /api/v1/runtime/models
 app.get('/api/v1/runtime/models', (_req, res) => {
   res.json({
     models: runtimeManager.getModelManager().getModels(),
@@ -154,7 +158,6 @@ app.get('/api/v1/runtime/models', (_req, res) => {
   });
 });
 
-// POST /api/v1/runtime/models/load
 app.post('/api/v1/runtime/models/load', (req, res) => {
   const modelId = req.body?.model_id;
   if (!modelId) {
@@ -169,7 +172,6 @@ app.post('/api/v1/runtime/models/load', (req, res) => {
   res.json({ success: true, model_id: modelId, status: 'READY' });
 });
 
-// POST /api/v1/runtime/models/unload
 app.post('/api/v1/runtime/models/unload', (req, res) => {
   const modelId = req.body?.model_id;
   if (!modelId) {
@@ -180,7 +182,6 @@ app.post('/api/v1/runtime/models/unload', (req, res) => {
   res.json({ success, model_id: modelId, status: 'UNLOADED' });
 });
 
-// POST /api/v1/runtime/select
 app.post('/api/v1/runtime/select', (req, res) => {
   const requestedProvider = req.body?.provider || 'auto';
   const modelId = req.body?.model_id;
@@ -197,7 +198,6 @@ app.post('/api/v1/runtime/select', (req, res) => {
   });
 });
 
-// POST /api/v1/inference
 app.post('/api/v1/inference', async (req, res) => {
   try {
     const input = typeof req.body?.input === 'string' ? req.body.input : (req.body?.message || '');
@@ -226,7 +226,6 @@ app.post('/api/v1/inference', async (req, res) => {
   }
 });
 
-// GET /api/v1/runtime/telemetry
 app.get('/api/v1/runtime/telemetry', (_req, res) => {
   res.json({
     telemetry: runtimeManager.getTelemetryHistory(),
@@ -234,7 +233,6 @@ app.get('/api/v1/runtime/telemetry', (_req, res) => {
   });
 });
 
-// POST /api/v1/runtime/benchmark
 app.post('/api/v1/runtime/benchmark', async (req, res) => {
   try {
     const provider = req.body?.provider as ProviderId | undefined;
@@ -257,17 +255,151 @@ app.post('/api/v1/runtime/benchmark', async (req, res) => {
   }
 });
 
-// 4. Assistant query handler (Phase 1 interface mapped to Phase 2 inference engine)
+// ----------------------------------------------------
+// PHASE 3 MULTIMODAL PERCEPTION APIS
+// ----------------------------------------------------
+
+// 1. Perception Status
+app.get('/api/v1/perception/status', (_req, res) => {
+  res.json(perceptionManager.getStatus());
+});
+
+// 2. Text Perception
+app.post('/api/v1/perception/text', (req, res) => {
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  if (!text) {
+    res.status(400).json({ error: 'Text content is required' });
+    return;
+  }
+  const context = perceptionManager.processText(text, { userAgent: req.headers['user-agent'] || 'Browser' });
+  res.json({ success: true, context });
+});
+
+// 3. Screen Perception (Explicit single frame)
+app.post('/api/v1/perception/screen', async (req, res) => {
+  try {
+    const body: ScreenCaptureRequest = req.body;
+    if (!body?.image_data_base64) {
+      res.status(400).json({ error: 'image_data_base64 is required for screen perception.' });
+      return;
+    }
+    const context = await perceptionManager.processScreen(body);
+    res.json({ success: true, context });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Screen capture perception failed';
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+// 4. Camera Perception (Explicit single frame)
+app.post('/api/v1/perception/camera', async (req, res) => {
+  try {
+    const body: CameraCaptureRequest = req.body;
+    if (!body?.image_data_base64) {
+      res.status(400).json({ error: 'image_data_base64 is required for camera perception.' });
+      return;
+    }
+    const context = await perceptionManager.processCamera(body);
+    res.json({ success: true, context });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Camera perception failed';
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+// 5. Voice Perception (Push-to-talk transcription)
+app.post('/api/v1/perception/voice', (req, res) => {
+  try {
+    const body: VoiceTranscriptionRequest = req.body;
+    if (!body?.transcript || !body.transcript.trim()) {
+      res.status(400).json({ error: 'Transcript is required for voice perception.' });
+      return;
+    }
+    const context = perceptionManager.processVoice(body);
+    res.json({ success: true, context });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Voice perception failed';
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+// 6. Document Perception (Upload & safe local text/schema extraction)
+app.post('/api/v1/perception/document', async (req, res) => {
+  try {
+    const filename = req.body?.filename;
+    const base64Data = req.body?.base64_data;
+    const mimeType = req.body?.mime_type;
+
+    if (!filename || !base64Data) {
+      res.status(400).json({ error: 'filename and base64_data are required for document perception.' });
+      return;
+    }
+
+    const tmpDir = path.resolve(__dirname, 'data', 'tmp', 'documents');
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+
+    // Write transient file safely
+    const safeFilename = `${Date.now()}-${path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const filePath = path.join(tmpDir, safeFilename);
+
+    const buffer = Buffer.from(base64Data.replace(/^data:.*?;base64,/, ''), 'base64');
+    await fs.promises.writeFile(filePath, buffer);
+
+    try {
+      const context = await perceptionManager.processDocument(filePath, filename, buffer.length, mimeType);
+      res.json({ success: true, context });
+    } finally {
+      // Clean up temporary file immediately: Privacy-First Principle
+      fs.promises.unlink(filePath).catch(() => {});
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Document perception failed';
+    res.status(400).json({ success: false, error: msg });
+  }
+});
+
+// 7. Get All Captured Contexts
+app.get('/api/v1/perception/context', (_req, res) => {
+  res.json({
+    contexts: perceptionManager.getAllContexts(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 8. Merge Contexts into Unified Multimodal Context
+app.post('/api/v1/perception/context/merge', (req, res) => {
+  const contextIds: string[] = Array.isArray(req.body?.context_ids) ? req.body.context_ids : [];
+  const primaryQuery = req.body?.primary_query || '';
+  const merged = perceptionManager.mergeContexts(contextIds, primaryQuery);
+  res.json({ success: true, unified_context: merged });
+});
+
+// 9. Unified Assistant Query Handler (Phase 1 UI + Phase 2 Runtime + Phase 3 Multimodal Context)
 app.post('/api/v1/assistant/query', async (req, res) => {
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
-  if (!message) {
-    res.status(400).json({ error: 'Empty message' });
+  const contextIds: string[] = Array.isArray(req.body?.context_ids) ? req.body.context_ids : [];
+
+  if (!message && contextIds.length === 0) {
+    res.status(400).json({ error: 'Empty message or context' });
     return;
   }
 
   try {
+    // Merge multimodal contexts if provided
+    let promptForEngine = message;
+    let multimodalSummary: string | undefined;
+
+    if (contextIds.length > 0) {
+      const mergedContext = perceptionManager.mergeContexts(contextIds, message);
+      promptForEngine = mergedContext.merged_text_representation;
+      multimodalSummary = `Combined ${mergedContext.active_modalities.length} modalities: [${mergedContext.active_modalities.join(', ')}]`;
+    }
+
+    // Execute via Phase 2 Hardware-Aware Runtime Engine
     const inferenceResult = await runtimeManager.infer({
-      input: message,
+      input: promptForEngine,
       requestedProvider: 'auto',
     });
 
@@ -280,6 +412,7 @@ app.post('/api/v1/assistant/query', async (req, res) => {
       latency_ms: inferenceResult.latency_ms,
       fallback_used: inferenceResult.fallback_used,
       fallback_reason: inferenceResult.fallback_reason,
+      multimodal_context: multimodalSummary,
       timestamp: new Date().toISOString(),
     });
   } catch (err: unknown) {
@@ -303,6 +436,7 @@ app.get('/api/info', (_req, res) => {
     version: VERSION,
     status: 'online',
     runtime: runtimeManager.getRuntimeStatus(),
+    perception: perceptionManager.getStatus(),
   });
 });
 

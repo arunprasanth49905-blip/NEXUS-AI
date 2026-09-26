@@ -1,9 +1,10 @@
 /**
  * NEXUS EDGE Central Type Definitions
- * Phase 1 + Phase 2 (Runtime Intelligence Engine)
+ * Phase 1, Phase 2 (Runtime) & Phase 3 (Multimodal Perception)
  */
 
 export * from './runtime';
+export * from './perception';
 
 export type NavPage = 
   | 'home' 
@@ -84,6 +85,8 @@ export interface ChatMessage {
   latencyMs?: number;
   fallbackUsed?: boolean;
   fallbackReason?: string | null;
+  multimodalContext?: string;
+  attachedContextIds?: string[];
   isStreaming?: boolean;
 }
 

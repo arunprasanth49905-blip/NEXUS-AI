@@ -11,15 +11,28 @@ import {
   CheckCircle2,
   Server,
   Activity as ActivityIcon,
-  Play
+  Play,
+  Eye,
+  FileText,
+  Monitor,
+  Camera,
+  Mic
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { RuntimeStatusCard } from '../components/ui/RuntimeStatusCard';
-import type { SystemMetrics, NavPage, RuntimeStatusResponse, BenchmarkRunResult, ProviderId } from '../types';
+import type { 
+  SystemMetrics, 
+  NavPage, 
+  RuntimeStatusResponse, 
+  BenchmarkRunResult, 
+  ProviderId,
+  PerceptionStatusResponse 
+} from '../types';
 import { fetchSystemMetrics, fetchRuntimeStatus, executeBenchmark, fallbackRuntimeStatus } from '../services/system';
+import { PerceptionService, fallbackPerceptionStatus } from '../services/perception';
 import './AdvancedDiagnostics.css';
 
 export interface AdvancedDiagnosticsProps {
@@ -33,6 +46,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
 }) => {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [runtime, setRuntime] = useState<RuntimeStatusResponse>(fallbackRuntimeStatus);
+  const [perception, setPerception] = useState<PerceptionStatusResponse>(fallbackPerceptionStatus);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -46,18 +60,20 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const [sysRes, rtRes] = await Promise.all([
+      const [sysRes, rtRes, percRes] = await Promise.all([
         fetchSystemMetrics(),
         fetchRuntimeStatus(),
+        PerceptionService.fetchStatus(),
       ]);
 
       setMetrics(sysRes.metrics);
       setRuntime(rtRes.runtime);
+      setPerception(percRes);
 
       if (sysRes.error && rtRes.error) {
         setErrorMsg(sysRes.error);
       } else if (isManual) {
-        onAddToast('Diagnostics synced', 'Fetched authentic host metrics and runtime status.', 'success');
+        onAddToast('Diagnostics synced', 'Fetched authentic host metrics, runtime status, and perception capabilities.', 'success');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Diagnostic retrieval failed';
@@ -83,7 +99,6 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
         `Avg latency: ${res.average_latency_ms} ms (${res.successful_runs}/${res.runs} successful runs).`,
         'success'
       );
-      // Refresh runtime telemetry
       loadDiagnostics(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Benchmark execution failed';
@@ -97,12 +112,13 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
     const rawPayload = {
       system_metrics: metrics,
       runtime_engine: runtime,
+      perception_engine: perception,
       last_benchmark: benchmarkResult,
       exported_at: new Date().toISOString(),
     };
     navigator.clipboard.writeText(JSON.stringify(rawPayload, null, 2));
     setCopied(true);
-    onAddToast('Raw JSON copied', 'Copied full diagnostic & runtime telemetry payload.', 'info');
+    onAddToast('Raw JSON copied', 'Copied full diagnostic, runtime, & perception telemetry payload.', 'info');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -110,7 +126,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
     <div className="nexus-diag-page animate-fade-in">
       <PageHeader
         title="ADVANCED DIAGNOSTICS"
-        subtitle="Low-level engineering diagnostics, host operating system, and hardware-aware AI runtime intelligence."
+        subtitle="Low-level engineering diagnostics, host operating system, hardware-aware AI runtime, and multimodal perception."
         breadcrumbs={[
           { label: 'Settings', onClick: () => onNavigate('settings') },
           { label: 'Advanced Diagnostics' },
@@ -132,9 +148,9 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
       <div className="nexus-diag-disclosure" role="alert">
         <ShieldCheck size={18} className="text-cyan flex-shrink-0" />
         <div className="nexus-diag-disclosure-text">
-          <span className="nexus-diag-disclosure-title">Truthful Hardware Disclosure Policy</span>
+          <span className="nexus-diag-disclosure-title">Truthful Hardware & Perception Disclosure Policy</span>
           <p>
-            Hardware acceleration metrics reflect authentic detected devices only. NEXUS EDGE strictly avoids synthetic benchmark generation, fabricated NPU TOPS, or unverified acceleration states.
+            Hardware acceleration and perception metrics reflect authentic detected devices only. NEXUS EDGE strictly avoids synthetic benchmark generation, fabricated NPU TOPS, fake OCR transcription, or unverified acceleration states.
           </p>
         </div>
       </div>
@@ -254,7 +270,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Phase Status</span>
-              <span className="nexus-diag-prop-val text-blue">Phase 2: AI Runtime Engine</span>
+              <span className="nexus-diag-prop-val text-blue">Phase 3: Multimodal Perception</span>
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Privacy Boundary</span>
@@ -318,6 +334,96 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
           </div>
         </Card>
       </div>
+
+      {/* PHASE 3: MULTIMODAL PERCEPTION SECTION */}
+      <Card variant="default" padding="md" className="nexus-diag-card">
+        <div className="nexus-diag-card-header">
+          <div className="nexus-diag-card-title-wrap">
+            <Eye size={18} className="text-cyan" />
+            <h2 className="nexus-diag-card-title">MULTIMODAL PERCEPTION CAPABILITIES</h2>
+          </div>
+          <span className="nexus-badge-tag nexus-tag-blue">PHASE 3</span>
+        </div>
+
+        <div className="nexus-diag-props-list">
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key flex items-center gap-1">
+              <FileText size={13} className="text-secondary" />
+              <span>Text Perception</span>
+            </span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{perception.modalities.text.status}</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key flex items-center gap-1">
+              <Monitor size={13} className="text-cyan" />
+              <span>Screen Perception (On-Demand User Share)</span>
+            </span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{perception.modalities.screen.status}</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key flex items-center gap-1">
+              <Camera size={13} className="text-purple" />
+              <span>Camera Perception (User-Triggered Snapshot)</span>
+            </span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{perception.modalities.camera.status}</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key flex items-center gap-1">
+              <Mic size={13} className="text-amber" />
+              <span>Voice Perception (Push-to-Talk)</span>
+            </span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{perception.modalities.voice.status}</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key flex items-center gap-1">
+              <FileText size={13} className="text-blue" />
+              <span>Document Perception (PDF, DOCX, TXT, MD, CSV)</span>
+            </span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{perception.modalities.document.status}</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">OCR Provider</span>
+            <span className="nexus-diag-prop-val nexus-val-unconfigured">
+              {perception.providers.ocr.status.replace('_', ' ')} (Native OCR not installed)
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Vision Structure Provider</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{perception.providers.vision.status} ({perception.providers.vision.engine})</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Privacy Guard</span>
+            <span className="nexus-diag-prop-val text-cyan">
+              ACTIVE (Zero Raw Audio/Camera/Screen Persistent Storage)
+            </span>
+          </div>
+        </div>
+      </Card>
 
       {/* BENCHMARKING SECTION */}
       <Card variant="default" padding="md" className="nexus-diag-card">
@@ -400,7 +506,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
         <div className="nexus-raw-header">
           <div className="nexus-raw-title-wrap">
             <Terminal size={16} className="text-blue" />
-            <h3 className="nexus-raw-title">Diagnostic & Runtime Telemetry Payload</h3>
+            <h3 className="nexus-raw-title">Diagnostic, Runtime & Perception Telemetry Payload</h3>
           </div>
           <Button
             variant="outline"
@@ -417,6 +523,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
             {
               system_metrics: metrics,
               runtime_engine: runtime,
+              perception_engine: perception,
               last_benchmark: benchmarkResult,
             },
             null,

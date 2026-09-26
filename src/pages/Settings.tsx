@@ -361,11 +361,11 @@ export const Settings: React.FC<SettingsProps> = ({
                 <div className="nexus-about-grid">
                   <div className="nexus-about-item">
                     <span className="nexus-about-label">VERSION</span>
-                    <span className="nexus-about-val">0.2.0</span>
+                    <span className="nexus-about-val">0.3.0</span>
                   </div>
                   <div className="nexus-about-item">
                     <span className="nexus-about-label">ARCHITECTURE PHASE</span>
-                    <span className="nexus-about-val text-blue">Phase 2: AI Runtime Engine</span>
+                    <span className="nexus-about-val text-blue">Phase 3: Multimodal Perception</span>
                   </div>
                   <div className="nexus-about-item">
                     <span className="nexus-about-label">TARGET PLATFORM</span>
