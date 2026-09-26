@@ -2,7 +2,7 @@
  * NEXUS-AI Phase 5: Agent Orchestration & Intelligent Task Planning Types
  */
 
-export type AgentRiskLevel = 'READ_ONLY' | 'LOW_RISK' | 'HIGH_RISK' | 'EXTERNAL_SIDE_EFFECT';
+export type AgentRiskLevel = 'READ_ONLY' | 'LOW_RISK' | 'HIGH_RISK' | 'EXTERNAL_SIDE_EFFECT' | 'DESTRUCTIVE';
 
 export type AgentAvailability = 'AVAILABLE' | 'UNAVAILABLE' | 'DEGRADED';
 

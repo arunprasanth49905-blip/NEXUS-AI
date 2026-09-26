@@ -15,6 +15,8 @@ import { VerificationEngine } from './verification.js';
 import { ApprovalGate } from './approval.js';
 import { ContextScoper } from './scoping.js';
 import { BrainRouter } from './router.js';
+import { ToolExecutionEngine } from '../tools/executor.js';
+import type { ToolRequest } from '../tools/types.js';
 import type { RuntimeManager } from '../manager.js';
 import type {
   OrchestrationTask,
@@ -294,6 +296,22 @@ export class AgentOrchestrator {
 
         const scopedContext = await this.scoper.scopeForAgent(agent, task.context, task.user_request);
 
+        const toolEngine = ToolExecutionEngine.getInstance();
+        const requestTool = async (toolId: string, capability: string, input: Record<string, unknown>) => {
+          const req: ToolRequest = {
+            request_id: `req-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            task_id: taskId,
+            execution_id: `exec-${taskId}-${step.step_id}`,
+            agent_id: agent.agent_id,
+            tool_id: toolId,
+            capability,
+            input,
+            requested_at: new Date().toISOString(),
+          };
+          const res = await toolEngine.executeToolRequest(req);
+          return res.output;
+        };
+
         // 3. Controlled Execution via ExecutionEngine
         const record = await this.executor.executeStep(
           step,
@@ -303,6 +321,7 @@ export class AgentOrchestrator {
             input_text: step.description || task.user_request,
             scoped_context: scopedContext.scoped_payload,
             dependency_outputs: depOutputs,
+            request_tool: requestTool,
           }
         );
 

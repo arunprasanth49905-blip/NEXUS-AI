@@ -9,7 +9,8 @@ import {
   Trash2, 
   Info,
   CheckCircle2,
-  Bot
+  Bot,
+  Wrench
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -17,6 +18,7 @@ import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import type { ActivityEntry } from '../types';
 import { agentService } from '../services/agent';
+import { toolService } from '../services/tool';
 import './Activity.css';
 
 export interface ActivityProps {
@@ -120,11 +122,15 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
 
   useEffect(() => {
     // Load authentic execution records from backend if present
-    agentService
-      .getExecutions()
-      .then((res) => {
-        if (res.executions && res.executions.length > 0) {
-          const liveEntries: ActivityEntry[] = res.executions.map((e) => ({
+    Promise.all([
+      agentService.getExecutions().catch(() => ({ executions: [] })),
+      toolService.getActions().catch(() => ({ actions: [] })),
+    ]).then(([agentRes, toolRes]) => {
+      const liveEntries: ActivityEntry[] = [];
+
+      if (agentRes.executions && agentRes.executions.length > 0) {
+        for (const e of agentRes.executions) {
+          liveEntries.push({
             id: `exec-${e.execution_id}`,
             timestamp: new Date(e.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             relativeTime: 'Recent',
@@ -132,11 +138,28 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
             category: 'agent',
             details: `Status: ${e.status}. Latency/Execution recorded in local orchestrator.`,
             isDemo: false,
-          }));
-          setActivities((prev) => [...liveEntries, ...prev.filter((p) => p.isDemo)]);
+          });
         }
-      })
-      .catch(() => {});
+      }
+
+      if (toolRes.actions && toolRes.actions.length > 0) {
+        for (const a of toolRes.actions) {
+          liveEntries.push({
+            id: `action-${a.audit_id}`,
+            timestamp: new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            relativeTime: 'Recent',
+            title: `${a.action}`,
+            category: 'action',
+            details: `Tool: ${a.tool_id} | Status: ${a.execution_status} | Risk: ${a.risk_level} | Duration: ${a.duration_ms}ms`,
+            isDemo: false,
+          });
+        }
+      }
+
+      if (liveEntries.length > 0) {
+        setActivities((prev) => [...liveEntries, ...prev.filter((p) => p.isDemo)]);
+      }
+    });
   }, []);
 
   const filtered = activities.filter((item) => {
@@ -146,6 +169,8 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
+      case 'action':
+        return <Wrench size={15} className="text-orange" />;
       case 'agent':
       case 'orchestration':
         return <Bot size={15} className="text-cyan" />;
@@ -228,6 +253,7 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
       <div className="nexus-activity-filter-bar">
         {[
           { id: 'all', label: 'All Activity' },
+          { id: 'action', label: 'Tools & Actions' },
           { id: 'agent', label: 'Agents & Plans' },
           { id: 'query', label: 'Queries' },
           { id: 'context', label: 'Context Events' },

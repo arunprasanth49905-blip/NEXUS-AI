@@ -88,6 +88,7 @@ export class ExecutionEngine {
       input_text: string;
       scoped_context: Record<string, unknown>;
       dependency_outputs?: Record<string, unknown>;
+      request_tool?: (tool_id: string, capability: string, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
     },
     options?: ExecutionOptions
   ): Promise<AgentExecutionRecord> {
@@ -161,6 +162,7 @@ export class ExecutionEngine {
             dependency_outputs: context.dependency_outputs,
             timeout_ms: timeoutMs,
             abort_signal: taskAbortController?.signal || options?.abort_signal,
+            request_tool: context.request_tool,
           },
           timeoutMs
         );

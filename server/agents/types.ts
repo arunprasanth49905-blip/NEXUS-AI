@@ -52,6 +52,7 @@ export interface AgentExecutionContext {
   dependency_outputs?: Record<string, unknown>;
   timeout_ms?: number;
   abort_signal?: AbortSignal;
+  request_tool?: (tool_id: string, capability: string, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 
 export interface AgentExecutionOutput {

@@ -116,9 +116,58 @@ Phase 5 equips NEXUS EDGE with autonomous goal reasoning, structured DAG task de
                  FINAL RESPONSE
 ```
 
+## Architecture Milestone: Phase 6 — Tool & Action Engine + Controlled AI Execution
+
+Phase 6 transitions NEXUS EDGE from "an AI that plans" to "an AI that can safely perform controlled, auditable, and verifiable actions":
+1. **Tool Registry & 10 Initial Safe Tools**:
+   - `text-analyzer` (READ_ONLY): Lexical metrics, entity analysis, structural insights
+   - `document-reader` (READ_ONLY): Reads PDF/CSV/MD/TXT via Phase 3 perception extractors
+   - `file-inspector` (READ_ONLY): Path allowlisted file metadata & text inspection
+   - `directory-inspector` (READ_ONLY): Safe directory listing without escape
+   - `file-creator` (LOW_RISK): Creates new files within permitted workspace (approval required by default)
+   - `file-editor` (HIGH_RISK): In-place file modification with replacement/append (approval required)
+   - `file-deleter` (DESTRUCTIVE): Single file deletion (approval strictly required)
+   - `text-exporter` (LOW_RISK): Exports deliverables to destination files (approval required)
+   - `json-analyzer` (READ_ONLY): JSON parsing, depth calculation, key analysis
+   - `csv-analyzer` (READ_ONLY): Tabular CSV structure, column profiling, row counting
+2. **Filesystem Sandbox & Security Guard**: Enforces `ALLOWED_WORKSPACE_ROOTS`, blocks path traversal (`../../`), and strictly denies access to secret files (`.env`, `id_rsa`, `credentials`).
+3. **Policy Engine & Approval Integration**: Evaluates tool requests against policies and agent capabilities (`ALLOW`, `DENY`, `REQUIRE_APPROVAL`). High-risk and destructive tools pause in `WAITING_FOR_APPROVAL`.
+4. **Secret Protection & Redaction**: Automatically scans tool outputs, audit events, and logs to redact API keys (`sk-...`, `AIza...`), bearer tokens, and private keys.
+5. **Idempotency, Retries & Timeouts**: Prevents duplicate executions of identical requests; controlled retry policy (`MAX_RETRIES = 2`) that never retries destructive or unapproved actions; default 30-second execution timeouts.
+6. **Action Verification Engine**: Validates disk state after mutations (verifies file existence, sizes, modified timestamps, and output schemas).
+7. **Action Audit Logger**: Immutable action ledger recording execution IDs, agents, tools, risk levels, and durations, surfaced in Activity and Advanced Diagnostics.
+
+```
+                  PHASE 5 AGENT
+                        |
+                   TOOL REQUEST
+                        |
+                   TOOL REGISTRY
+                        |
+                 CAPABILITY CHECK
+                        |
+             CONTEXT / PRIVACY CHECK
+                        |
+               RISK CLASSIFICATION
+                        |
+                PERMISSION POLICY
+                        |
+                  APPROVAL GATE
+                        |
+                  TOOL EXECUTOR
+                        |
+                   SANDBOX / FS
+                        |
+                  VERIFICATION
+                        |
+                   AUDIT LOGGER
+                        |
+                  FINAL RESPONSE
+```
+
 ---
 
-## API Endpoints (Phases 1, 2, 3, 4 & 5)
+## API Endpoints (Phases 1 through 6)
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -130,31 +179,29 @@ Phase 5 equips NEXUS EDGE with autonomous goal reasoning, structured DAG task de
 | `POST` | `/api/v1/runtime/benchmark` | Iterative benchmark on selected provider |
 | `GET` | `/api/v1/perception/status` | Availability status for text, screen, camera, voice, doc, OCR, vision |
 | `GET` | `/api/v1/context/status` | Status of Context Engine, Active Session, and Memory Repository |
-| `GET` | `/api/v1/context/session` | Get active session metadata |
-| `POST` | `/api/v1/context/session` | Reset or create workspace session |
 | `GET` | `/api/v1/tasks` | List all orchestration tasks |
 | `POST` | `/api/v1/tasks` | Create task and generate intelligent DAG plan |
-| `GET` | `/api/v1/tasks/current` | Retrieve active task goal |
-| `DELETE` | `/api/v1/tasks/current` | Clear current active task goal |
-| `GET` | `/api/v1/tasks/:id` | Get specific task details |
-| `GET` | `/api/v1/tasks/:id/plan` | Get task plan and steps |
 | `POST` | `/api/v1/tasks/:id/execute` | Execute task plan through DAG execution engine |
-| `GET` | `/api/v1/tasks/:id/status` | Get execution status and step results |
-| `POST` | `/api/v1/tasks/:id/cancel` | Cancel task execution safely |
 | `GET` | `/api/v1/agents` | List registered agents and capabilities |
-| `GET` | `/api/v1/agents/:id` | Get specific agent definition |
-| `GET` | `/api/v1/agents/capabilities` | Map of available capabilities and agents |
 | `GET` | `/api/v1/approvals` | List pending human approval requests |
 | `POST` | `/api/v1/approvals/:id/approve` | Grant approval and resume execution |
 | `POST` | `/api/v1/approvals/:id/reject` | Reject action |
-| `GET` | `/api/v1/executions` | List agent execution telemetry records |
-| `GET` | `/api/v1/orchestrator/status` | Full diagnostic report for Advanced Diagnostics |
+| `GET` | `/api/v1/tools` | List registered tools, categories, and schemas |
+| `GET` | `/api/v1/tools/:id` | Get individual tool definition |
+| `GET` | `/api/v1/tools/capabilities` | Map of available tool capabilities |
+| `GET` | `/api/v1/tools/policies` | Policy engine settings and sandbox roots |
+| `GET` | `/api/v1/tools/status` | Tool engine diagnostic status report |
+| `POST` | `/api/v1/tools/validate` | Validate tool input against schema |
+| `POST` | `/api/v1/tools/execute` | Controlled tool execution with policy & approval enforcement |
+| `GET` | `/api/v1/tools/executions` | List tool execution records |
+| `GET` | `/api/v1/tools/executions/:id` | Get specific tool execution details |
+| `POST` | `/api/v1/tools/executions/:id/cancel` | Cancel tool execution |
+| `GET` | `/api/v1/actions` | Auditable action history log |
+| `GET` | `/api/v1/actions/:id` | Get specific action audit event |
 | `GET` | `/api/v1/memory` | List stored memories with optional `?type=` filter |
 | `POST` | `/api/v1/memory` | Explicitly retain new memory (audited by Privacy Guard) |
 | `POST` | `/api/v1/memory/search` | Retrieve memories using deterministic ranking |
 | `DELETE` | `/api/v1/memory/:id` | Permanently delete individual memory |
-| `DELETE` | `/api/v1/memory/session` | Clear ephemeral session memories |
-| `DELETE` | `/api/v1/memory/project` | Clear project-scoped memories |
 
 ---
 
@@ -172,3 +219,4 @@ Build for production:
 npm run build
 npm start
 ```
+

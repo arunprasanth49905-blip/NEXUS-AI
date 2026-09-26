@@ -19,7 +19,8 @@ import {
   Mic,
   Brain,
   Database,
-  Bot
+  Bot,
+  Wrench
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -36,10 +37,12 @@ import type {
   ContextMemoryStatusResponse
 } from '../types';
 import type { OrchestratorStatusReport } from '../types/agent';
+import type { ToolEngineStatusReport } from '../types/tool';
 import { fetchSystemMetrics, fetchRuntimeStatus, executeBenchmark, fallbackRuntimeStatus } from '../services/system';
 import { PerceptionService, fallbackPerceptionStatus } from '../services/perception';
 import { api } from '../services/api';
 import { agentService } from '../services/agent';
+import { toolService } from '../services/tool';
 import './AdvancedDiagnostics.css';
 
 export interface AdvancedDiagnosticsProps {
@@ -80,6 +83,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
   const [perception, setPerception] = useState<PerceptionStatusResponse>(fallbackPerceptionStatus);
   const [contextMemory, setContextMemory] = useState<ContextMemoryStatusResponse>(fallbackContextMemoryStatus);
   const [orchestrator, setOrchestrator] = useState<OrchestratorStatusReport | null>(null);
+  const [toolsStatus, setToolsStatus] = useState<ToolEngineStatusReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -113,6 +117,13 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
       try {
         const orchRes = await agentService.getOrchestratorStatus();
         setOrchestrator(orchRes);
+      } catch {
+        // Fallback default
+      }
+
+      try {
+        const tRes = await toolService.getStatus();
+        setToolsStatus(tRes);
       } catch {
         // Fallback default
       }
@@ -628,6 +639,118 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
             </span>
           </div>
         </div>
+      </Card>
+
+      {/* PHASE 6: TOOLS & ACTIONS ENGINE */}
+      <Card variant="default" padding="md" className="nexus-diag-card">
+        <div className="nexus-diag-card-header">
+          <div className="nexus-diag-card-title-wrap">
+            <Wrench size={18} className="text-orange" />
+            <h2 className="nexus-diag-card-title">TOOLS & ACTIONS ENGINE (PHASE 6)</h2>
+          </div>
+          <StatusBadge
+            status={toolsStatus?.status === 'READY' ? 'ready' : 'limited'}
+            label={toolsStatus?.status || 'READY'}
+          />
+        </div>
+
+        <div className="nexus-diag-props-grid">
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Tool Engine</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{toolsStatus?.status || 'READY'} (Sandboxed & Controlled Execution)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Registered Tools</span>
+            <span className="nexus-diag-prop-val nexus-mono-val">
+              {toolsStatus?.registered_tools_count ?? 10} Tools ({toolsStatus?.enabled_tools_count ?? 10} Enabled)
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Filesystem Sandbox</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>AVAILABLE (Workspace Path Allowlist, Traversal & Secret Protection)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Network Policy</span>
+            <span className="nexus-diag-prop-val text-yellow">
+              <ShieldCheck size={13} />
+              <span>PROTECTED (Outbound Network Blocked by Safe Default)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Policy Engine & Approvals</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>ENFORCED (High-Risk & Destructive Actions Require Human Approval)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Execution Timeouts & Retries</span>
+            <span className="nexus-diag-prop-val nexus-mono-val">
+              Default Timeout: {toolsStatus?.execution_engine.default_timeout_seconds ?? 30}s | Max Retries: {toolsStatus?.execution_engine.max_retries ?? 2}
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Secret Protection Layer</span>
+            <span className="nexus-diag-prop-val text-cyan">
+              ACTIVE (Token & Credential Redaction on All Tool Outputs)
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Action Audit Logger</span>
+            <span className="nexus-diag-prop-val nexus-mono-val">
+              {toolsStatus?.audit_logger.total_events ?? 0} Recorded Auditable Events
+            </span>
+          </div>
+        </div>
+
+        {/* Registered Tools List */}
+        {toolsStatus?.tools && toolsStatus.tools.length > 0 && (
+          <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Available Tools ({toolsStatus.tools.length})
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.5rem', marginTop: '0.5rem' }}>
+              {toolsStatus.tools.map((t) => (
+                <div key={t.tool_id} style={{ padding: '0.5rem 0.75rem', background: 'var(--card-bg-subtle, rgba(255,255,255,0.02))', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t.name}</span>
+                    <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '3px', background: t.risk_level === 'DESTRUCTIVE' ? 'rgba(239,68,68,0.2)' : t.risk_level === 'HIGH_RISK' ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)', color: t.risk_level === 'DESTRUCTIVE' ? '#f87171' : t.risk_level === 'HIGH_RISK' ? '#fbbf24' : '#60a5fa' }}>
+                      {t.risk_level}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
+                    {t.description}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                    {t.capabilities.map((c) => (
+                      <span key={c} style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', padding: '1px 4px', borderRadius: '2px', fontFamily: 'var(--font-mono)' }}>
+                        {c}
+                      </span>
+                    ))}
+                    {t.approval_required && (
+                      <span style={{ fontSize: '0.65rem', color: '#fbbf24', fontWeight: 600 }}>
+                        • Approval Required
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* BENCHMARKING SECTION */}

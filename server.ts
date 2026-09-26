@@ -6,6 +6,11 @@ import { RuntimeManager } from './server/manager.js';
 import { PerceptionManager } from './server/perception/manager.js';
 import { ContextMemoryEngine } from './server/context_memory/manager.js';
 import { AgentOrchestrator } from './server/agents/orchestrator.js';
+import { ToolRegistry } from './server/tools/registry.js';
+import { registerDefaultTools } from './server/tools/implementations/index.js';
+import { ToolExecutionEngine } from './server/tools/executor.js';
+import { FilesystemSandbox } from './server/tools/sandbox.js';
+import { ActionAuditLogger } from './server/tools/audit.js';
 import type { ProviderId } from './src/types/runtime.js';
 import type { ScreenCaptureRequest, CameraCaptureRequest, VoiceTranscriptionRequest } from './src/types/perception.js';
 import type { MemoryType } from './src/types/context_memory.js';
@@ -34,9 +39,12 @@ app.use((_req, res, next) => {
 });
 
 const PROJECT_NAME = 'NEXUS EDGE';
-const VERSION = '0.5.0';
-const PHASE = 'Phase 5 - Agent Orchestration & Intelligent Task Planning';
+const VERSION = '0.6.0';
+const PHASE = 'Phase 6 - Tool & Action Engine + Controlled AI Execution';
 const TAGLINE = "Understand what you're doing. Get intelligent help. Keep your data private.";
+
+// Initialize Filesystem Sandbox to workspace root
+FilesystemSandbox.initialize(__dirname);
 
 // Instantiate Hardware-Aware AI Runtime Manager (Phase 2)
 const runtimeManager = new RuntimeManager();
@@ -52,6 +60,12 @@ const contextMemoryEngine = ContextMemoryEngine.getInstance();
 
 // Instantiate Agent Orchestration & Task Planning Engine (Phase 5)
 const agentOrchestrator = AgentOrchestrator.getInstance({ runtimeManager });
+
+// Instantiate Tool & Action Engine (Phase 6)
+const toolRegistry = ToolRegistry.getInstance();
+registerDefaultTools(toolRegistry);
+const toolExecutionEngine = ToolExecutionEngine.getInstance({ registry: toolRegistry });
+const actionAuditLogger = ActionAuditLogger.getInstance();
 
 // 1. Health check
 app.get('/api/v1/health', (_req, res) => {
@@ -625,6 +639,131 @@ app.get('/api/v1/orchestrator/status', (_req, res) => {
   res.json(agentOrchestrator.getStatusReport());
 });
 
+// ----------------------------------------------------
+// PHASE 6: TOOL & ACTION ENGINE APIS
+// ----------------------------------------------------
+
+app.get('/api/v1/tools', (_req, res) => {
+  res.json({
+    tools: toolRegistry.listInfos(),
+    total: toolRegistry.getRegisteredCount(),
+    enabled: toolRegistry.getEnabledCount(),
+  });
+});
+
+app.get('/api/v1/tools/capabilities', (_req, res) => {
+  const capMap: Record<string, string[]> = {};
+  for (const tool of toolRegistry.list()) {
+    for (const cap of tool.capabilities) {
+      if (!capMap[cap]) capMap[cap] = [];
+      capMap[cap].push(tool.tool_id);
+    }
+  }
+  res.json({ capabilities: capMap, timestamp: new Date().toISOString() });
+});
+
+app.get('/api/v1/tools/status', (_req, res) => {
+  res.json(toolExecutionEngine.getStatusReport());
+});
+
+app.get('/api/v1/tools/policies', (_req, res) => {
+  res.json({
+    filesystem_enabled: toolExecutionEngine.policyEngine.filesystem_enabled,
+    network_enabled: toolExecutionEngine.policyEngine.network_enabled,
+    browser_enabled: toolExecutionEngine.policyEngine.browser_enabled,
+    external_api_enabled: toolExecutionEngine.policyEngine.external_api_enabled,
+    auto_execute_safe_tasks: toolExecutionEngine.policyEngine.auto_execute_safe_tasks,
+    approval_required_for_high_risk: toolExecutionEngine.policyEngine.approval_required_for_high_risk,
+    allowed_workspace_roots: FilesystemSandbox.getAllowedRoots(),
+    max_file_size_mb: FilesystemSandbox.getMaxFileSizeMB(),
+  });
+});
+
+app.get('/api/v1/tools/:tool_id', (req, res) => {
+  const tool = toolRegistry.get(req.params.tool_id);
+  if (!tool) {
+    res.status(404).json({ error: `Tool '${req.params.tool_id}' not found.` });
+    return;
+  }
+  res.json({ tool: tool.getInfo() });
+});
+
+app.post('/api/v1/tools/validate', (req, res) => {
+  const { tool_id, input } = req.body || {};
+  const tool = toolRegistry.get(tool_id);
+  if (!tool) {
+    res.status(404).json({ error: `Tool '${tool_id}' not found.` });
+    return;
+  }
+  const validation = tool.validateInput(input || {});
+  res.json(validation);
+});
+
+app.post('/api/v1/tools/execute', async (req, res) => {
+  const { tool_id, capability, input, task_id, agent_id, approval_id, idempotency_key } = req.body || {};
+  if (!tool_id || !input) {
+    res.status(400).json({ error: 'tool_id and input are required.' });
+    return;
+  }
+
+  const toolRequest = {
+    request_id: `req-api-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    task_id,
+    agent_id: agent_id || 'api-caller',
+    tool_id,
+    capability: capability || (toolRegistry.get(tool_id)?.capabilities[0] ?? ''),
+    input,
+    requested_at: new Date().toISOString(),
+    approval_id,
+    idempotency_key,
+  };
+
+  try {
+    const result = await toolExecutionEngine.executeToolRequest(toolRequest);
+    res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Tool execution failed';
+    res.status(500).json({ error: msg });
+  }
+});
+
+app.get('/api/v1/tools/executions', (_req, res) => {
+  res.json({
+    executions: toolExecutionEngine.listExecutions(),
+  });
+});
+
+app.get('/api/v1/tools/executions/:execution_id', (req, res) => {
+  const exec = toolExecutionEngine.getExecution(req.params.execution_id);
+  if (!exec) {
+    res.status(404).json({ error: `Execution '${req.params.execution_id}' not found.` });
+    return;
+  }
+  res.json({ execution: exec });
+});
+
+app.post('/api/v1/tools/executions/:execution_id/cancel', (req, res) => {
+  const cancelled = toolExecutionEngine.cancelExecution(req.params.execution_id);
+  res.json({ success: cancelled, execution_id: req.params.execution_id });
+});
+
+app.get('/api/v1/actions', (req, res) => {
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  res.json({
+    actions: actionAuditLogger.listEvents(limit),
+    total: actionAuditLogger.getTotalEventsCount(),
+  });
+});
+
+app.get('/api/v1/actions/:action_id', (req, res) => {
+  const event = actionAuditLogger.getEvent(req.params.action_id);
+  if (!event) {
+    res.status(404).json({ error: `Action '${req.params.action_id}' not found.` });
+    return;
+  }
+  res.json({ action: event });
+});
+
 // 4. Memory List & Search
 app.get('/api/v1/memory', async (req, res) => {
   const memoryType = req.query.type as MemoryType | undefined;
@@ -780,6 +919,7 @@ app.get('/api/info', async (_req, res) => {
     perception: perceptionManager.getStatus(),
     context_memory: await contextMemoryEngine.getStatus(),
     orchestrator: agentOrchestrator.getStatusReport(),
+    tools: toolExecutionEngine.getStatusReport(),
   });
 });
 
