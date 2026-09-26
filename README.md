@@ -2,111 +2,155 @@
 
 > **"Understand what you're doing. Get intelligent help. Keep your data private."**
 
-NEXUS EDGE is a context-aware edge AI workspace designed to operate with local-first boundaries, truthful system disclosures, and zero remote telemetry.
+NEXUS EDGE is a context-aware edge AI workspace designed to operate with strict local-first boundaries, truthful hardware disclosures, and zero remote cloud telemetry.
 
 ---
 
-## Phase 1 Deliverable: Product Foundation + Application Shell
+## Architecture Milestone: Phase 2 — AI Runtime Engine / Hardware-Aware Inference
 
-Phase 1 focuses on:
-- **Commercial-Grade Product Interface**: Restrained charcoal dark theme, electric blue & cyan accents, 8px grid system, WCAG AA accessible contrast, and zero generic template artifacts.
-- **Application Shell & Navigation**: Responsive sidebar, keyboard shortcuts (`Alt+1` to `Alt+5`, `Ctrl+K`), top bar with breadcrumbs and live edge connection indicators.
-- **Full Screen Suite**:
-  - `Home`: Welcome hero, prompt bar with modality triggers, quick action templates, current context panel, and recent interactions timeline.
-  - `Ask NEXUS`: Dedicated AI interaction shell with conversation thread, copy utilities, session reset, and clearly labeled future perception controls (Voice, Screen, Camera, Documents).
-  - `Knowledge`: Workspace knowledge references with filtering, search, and accessible modal for registering local documents and code snippets.
-  - `Activity`: Grouped audit timeline (Today, Yesterday, Earlier) with category filtering and JSON export.
-  - `Settings`: General, AI behavior, strict privacy guardrails, and runtime execution preferences.
-  - `Advanced Diagnostics`: Low-level engineering diagnostics reporting authentic host metrics and truthful hardware disclosures (zero synthetic metrics or fabricated TOPS).
-- **Backend System Foundation**: Python FastAPI service providing real host inspection (`/api/v1/health`, `/api/v1/system`, `/api/v1/context`, `/api/v1/assistant/query`).
-
----
-
-## Architecture Overview
+Phase 2 builds a production-grade, hardware-aware execution layer that answers: **"Where should this AI task run?"**
 
 ```
-src/
-├── components/
-│   ├── ui/               # Button, IconButton, Card, StatusBadge, Input, SearchInput, EmptyState, Modal, Tabs, ContextIndicator, Skeleton
-│   ├── layout/           # AppShell, Sidebar, TopBar
-│   └── common/           # CommandBar (Ctrl+K), ToastContainer, PageHeader
-├── pages/
-│   ├── Home.tsx                  # Primary workspace dashboard & quick actions
-│   ├── AskNexus.tsx              # Interaction shell & future perception controls
-│   ├── Knowledge.tsx             # Document & code reference manager
-│   ├── Activity.tsx              # Chronological event audit timeline
-│   ├── Settings.tsx              # Privacy perimeter & interface preferences
-│   └── AdvancedDiagnostics.tsx   # Truthful host diagnostics & raw JSON inspector
-├── services/
-│   ├── api.ts            # Central API client with timeout & error handling
-│   └── system.ts         # Diagnostic fetching with graceful offline baseline
-├── types/
-│   └── index.ts          # Comprehensive TypeScript interface definitions
-├── styles/
-│   └── tokens.css        # Color tokens, typography, 8px grid spacing, radii
-├── App.tsx               # Top-level state, routing, toast manager, health polling
-└── index.css             # Base resets, typography, and utility classes
-
-backend/
-├── app/
-│   ├── api/routes.py     # FastAPI endpoints (/health, /system, /context, /assistant/query)
-│   ├── core/config.py    # Pydantic v2 application configuration & CORS
-│   ├── services/system_service.py # Authentic psutil & platform inspection
-│   └── main.py           # FastAPI app instance
-└── tests/
-    └── test_api.py       # Pytest unit tests for all endpoints
+USER TASK
+   ↓
+TASK & MODEL REQUIREMENTS
+   ↓
+RUNTIME MANAGER
+   ↓
+HARDWARE DETECTOR
+   ↓
+PROVIDER REGISTRY
+┌─────────────────────────────────┐
+│ 1. Qualcomm® QNN / Snapdragon® │
+│ 2. GPU (CUDA / DirectML)       │
+│ 3. CPU (Native Host Baseline)   │
+└─────────────────────────────────┘
+   ↓
+MODEL MANAGER & COMPATIBILITY
+   ↓
+RUNTIME SELECTION (QNN → GPU → CPU)
+   ↓
+INFERENCE ENGINE
+   ↓
+ACTUAL MEASURED TELEMETRY
+   ↓
+RESULT + EXPLANATION
 ```
 
----
+### Core Architecture Components
 
-## Getting Started
+1. **Hardware Detector (`server/detector.ts`)**:
+   - Inspects host processor, architecture, CPU physical cores, and logical threads.
+   - Detects Snapdragon processor signatures without false positives.
+   - Distinguishes between **GPU hardware presence** and **accelerated inference runtime availability**.
+   - Validates Qualcomm QNN SDK paths and dynamic libraries (`libQnnHtp.so` / `QnnHtp.dll`).
 
-### 1. Backend Service (FastAPI)
+2. **Runtime Providers (`server/providers/`)**:
+   - **`CPUProvider` (`server/providers/cpu.ts`)**: Reliable baseline execution engine. Executes real semantic context classification, intent detection, and measures authentic clock cycles and latency.
+   - **`GPUProvider` (`server/providers/gpu.ts`)**: Honest GPU detection. Returns `NOT_AVAILABLE` or `NOT_CONFIGURED` unless native compute runtimes are initialized.
+   - **`QNNProvider` (`server/providers/qnn.ts`)**: Snapdragon Hexagon NPU provider. Returns `NOT_AVAILABLE` on x86_64 machines without Qualcomm hardware.
 
-```bash
-# Start the local edge service
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
-```
+3. **Runtime Selection Engine (`server/selection.ts`)**:
+   - Evaluates provider chain: `QNN → GPU → CPU`.
+   - Selects only genuinely available, initialized, and model-compatible providers.
+   - Transparently exposes `fallback_used` and `fallback_reason`.
 
-Endpoints available:
-- `GET http://127.0.0.1:8000/api/v1/health`
-- `GET http://127.0.0.1:8000/api/v1/system`
-- `GET http://127.0.0.1:8000/api/v1/context`
-- `POST http://127.0.0.1:8000/api/v1/assistant/query`
-- Swagger UI: `http://127.0.0.1:8000/docs`
+4. **Model Manager (`server/models.ts`)**:
+   - Manages model lifecycle (`DISCOVERED → VALIDATING → READY → UNLOADED`).
+   - Supports ONNX, GGUF, TorchScript, and Qualcomm QNN DLC model containers.
 
-### 2. Frontend Application (Vite + React + TypeScript)
+5. **Runtime Explanation Engine**:
+   - Answers: *"Why did NEXUS select this runtime?"* with verifiable facts based on current hardware state.
 
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Run production build
-npm run build
-
-# Run unit tests (backend)
-python -m pytest backend/tests
-```
-
-Frontend runs at `http://127.0.0.1:5173`.
+6. **Benchmarking & Telemetry**:
+   - Computes authentic inference latency (min, max, average) across test iterations.
+   - Zero synthetic benchmark generation or fabricated TOPS.
 
 ---
 
 ## Truthful Hardware Disclosure Policy
 
-In accordance with competition rules and commercial design integrity:
-- NEXUS EDGE strictly discloses authentic host metrics (Windows 11, physical cores, logical threads, RAM).
-- Hardware acceleration (NPU, QNN, TOPS) is truthfully disclosed as **"Not detected"** or **"Not configured"** unless physical edge hardware is verified by the platform runtime.
-- No synthetic benchmark numbers or fabricated model parameters are presented.
+In accordance with strict technical integrity standards:
+- **No Synthetic Benchmarks**: Latency metrics are measured directly from execution using `performance.now()`.
+- **No Fabricated Acceleration**: Snapdragon NPU and Qualcomm QNN are never reported as active unless native libraries and hardware are detected.
+- **Normal PC Compatibility**: On a standard Windows or Linux x86_64 computer, NEXUS EDGE truthfully reports:
+  - CPU: **READY**
+  - GPU: **NOT CONFIGURED** / **NOT AVAILABLE**
+  - QNN: **NOT DETECTED**
+  - Snapdragon: **NOT DETECTED**
+  - Active Provider: **CPU (Fallback)**
 
 ---
 
-## Roadmap
+## API Endpoints (Phase 1 & Phase 2)
 
-- **Phase 1 (Complete)**: Product Foundation, Industrial-Grade User Interface, Application Shell, Basic System Foundation.
-- **Phase 2 (Upcoming)**: Edge AI Runtime & Local Model Pipeline integration.
-- **Phase 3 (Upcoming)**: Multimodal Perception (Voice, Screen, Camera).
-- **Phase 4 (Upcoming)**: Local Context & Memory Vector Indexing (RAG).
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/health` | System health, service status, and active provider |
+| `GET` | `/api/v1/system` | Authentic host hardware specs and acceleration state |
+| `GET` | `/api/v1/context` | Active context, boundary state, and model reference |
+| `POST` | `/api/v1/assistant/query` | Primary assistant endpoint (executes hardware-aware inference) |
+| `GET` | `/api/v1/runtime/status` | Comprehensive runtime state, selection, and explanation |
+| `GET` | `/api/v1/runtime/providers` | Status and capabilities for QNN, GPU, and CPU providers |
+| `GET` | `/api/v1/runtime/capabilities` | Detailed hardware acceleration feature matrix |
+| `GET` | `/api/v1/runtime/models` | Registered model metadata and supported provider targets |
+| `POST` | `/api/v1/runtime/models/load` | Load model into runtime memory |
+| `POST` | `/api/v1/runtime/models/unload` | Unload model from runtime memory |
+| `POST` | `/api/v1/runtime/select` | Test runtime provider selection against criteria |
+| `POST` | `/api/v1/inference` | Direct inference execution endpoint with telemetry |
+| `GET` | `/api/v1/runtime/telemetry` | Recent execution latency and memory usage log |
+| `POST` | `/api/v1/runtime/benchmark` | Run iterative benchmark on selected provider |
+
+---
+
+## Getting Started
+
+### 1. Installation
+
+```bash
+npm install
+```
+
+### 2. Environment Configuration
+
+Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+### 3. Run Development Server
+
+```bash
+npm run dev
+```
+
+Server starts on `http://0.0.0.0:3000`.
+
+### 4. Run Automated Test Suite
+
+```bash
+npm test
+```
+
+### 5. Production Build
+
+```bash
+npm run build
+npm start
+```
+
+---
+
+## Verification Checklist
+
+- [x] Phase 1 UI and routes preserved (Home, Ask NEXUS, Knowledge, Activity, Settings, Diagnostics)
+- [x] Honest hardware detection (zero fabricated Snapdragon or NPU claims on x86_64)
+- [x] Distinct GPU device vs GPU inference provider state
+- [x] QNN provider with Qualcomm SDK and library discovery
+- [x] Hierarchical runtime selection (`QNN → GPU → CPU`) with transparent fallback
+- [x] Model Manager with multi-format support
+- [x] "Why this runtime?" explanation card in UI
+- [x] Real iterative latency benchmarking (min/max/average)
+- [x] Automated test suite passing with 100% success
+- [x] Clean production build (`npm run build`)

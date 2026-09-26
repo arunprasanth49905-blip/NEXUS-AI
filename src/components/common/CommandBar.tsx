@@ -88,10 +88,17 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     },
     {
       id: 'nav-diagnostics',
-      title: 'Open Advanced Diagnostics',
+      title: 'Open Advanced Diagnostics & AI Runtime',
       category: 'Diagnostics',
       icon: <Cpu size={16} />,
       shortcut: 'Alt+D',
+      run: () => { onNavigate('diagnostics'); onClose(); },
+    },
+    {
+      id: 'act-bench',
+      title: 'Benchmark AI Execution Latency',
+      category: 'Diagnostics',
+      icon: <Cpu size={16} />,
       run: () => { onNavigate('diagnostics'); onClose(); },
     },
     {

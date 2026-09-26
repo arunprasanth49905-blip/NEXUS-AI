@@ -295,11 +295,11 @@ export const Settings: React.FC<SettingsProps> = ({
               <Card variant="default" padding="md" className="nexus-settings-card">
                 <div className="nexus-setting-row">
                   <div className="nexus-setting-info">
-                    <span className="nexus-setting-title">Local Edge Service</span>
-                    <span className="nexus-setting-desc">FastAPI local host listener at 127.0.0.1:8000. Status: {systemStatus.toUpperCase()}</span>
+                    <span className="nexus-setting-title">Local Edge AI Runtime</span>
+                    <span className="nexus-setting-desc">Hardware-aware engine at /api/v1/runtime. Status: {systemStatus.toUpperCase()}</span>
                   </div>
                   <span className={`nexus-badge-tag ${isBackendConnected ? 'nexus-tag-green' : 'nexus-tag-amber'}`}>
-                    {isBackendConnected ? 'Online (Ready)' : 'Standalone (Offline)'}
+                    {isBackendConnected ? 'Online (Phase 2 Active)' : 'Standalone (Offline)'}
                   </span>
                 </div>
 
@@ -308,9 +308,9 @@ export const Settings: React.FC<SettingsProps> = ({
                 <div className="nexus-setting-row">
                   <div className="nexus-setting-info">
                     <span className="nexus-setting-title">Current Workspace Context</span>
-                    <span className="nexus-setting-desc">Active project: {context.project} • Boundary: {context.boundary}</span>
+                    <span className="nexus-setting-desc">Active project: {context.project} • Runtime: {context.runtime} • Model: {context.active_model || 'nexus-edge-intent-v1'}</span>
                   </div>
-                  <span className="nexus-badge-tag">Local Process Engine</span>
+                  <span className="nexus-badge-tag">Hardware-Aware Engine</span>
                 </div>
 
                 <div className="nexus-setting-divider" />
@@ -361,11 +361,11 @@ export const Settings: React.FC<SettingsProps> = ({
                 <div className="nexus-about-grid">
                   <div className="nexus-about-item">
                     <span className="nexus-about-label">VERSION</span>
-                    <span className="nexus-about-val">0.1.0</span>
+                    <span className="nexus-about-val">0.2.0</span>
                   </div>
                   <div className="nexus-about-item">
                     <span className="nexus-about-label">ARCHITECTURE PHASE</span>
-                    <span className="nexus-about-val text-blue">Phase 1: Product Foundation</span>
+                    <span className="nexus-about-val text-blue">Phase 2: AI Runtime Engine</span>
                   </div>
                   <div className="nexus-about-item">
                     <span className="nexus-about-label">TARGET PLATFORM</span>

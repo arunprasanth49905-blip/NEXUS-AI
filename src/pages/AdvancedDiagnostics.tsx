@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Cpu, 
   HardDrive, 
@@ -9,14 +9,17 @@ import {
   AlertTriangle, 
   Terminal,
   CheckCircle2,
-  Server
+  Server,
+  Activity as ActivityIcon,
+  Play
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import type { SystemMetrics, NavPage } from '../types';
-import { fetchSystemMetrics } from '../services/system';
+import { RuntimeStatusCard } from '../components/ui/RuntimeStatusCard';
+import type { SystemMetrics, NavPage, RuntimeStatusResponse, BenchmarkRunResult, ProviderId } from '../types';
+import { fetchSystemMetrics, fetchRuntimeStatus, executeBenchmark, fallbackRuntimeStatus } from '../services/system';
 import './AdvancedDiagnostics.css';
 
 export interface AdvancedDiagnosticsProps {
@@ -29,22 +32,32 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
   onAddToast,
 }) => {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
-  const [isLive, setIsLive] = useState(false);
+  const [runtime, setRuntime] = useState<RuntimeStatusResponse>(fallbackRuntimeStatus);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Benchmarking State
+  const [benchmarkResult, setBenchmarkResult] = useState<BenchmarkRunResult | null>(null);
+  const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [benchmarkRuns, setBenchmarkRuns] = useState(5);
 
   const loadDiagnostics = useCallback(async (isManual = false) => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const res = await fetchSystemMetrics();
-      setMetrics(res.metrics);
-      setIsLive(res.isLive);
-      if (res.error) {
-        setErrorMsg(res.error);
+      const [sysRes, rtRes] = await Promise.all([
+        fetchSystemMetrics(),
+        fetchRuntimeStatus(),
+      ]);
+
+      setMetrics(sysRes.metrics);
+      setRuntime(rtRes.runtime);
+
+      if (sysRes.error && rtRes.error) {
+        setErrorMsg(sysRes.error);
       } else if (isManual) {
-        onAddToast('Diagnostics synced', 'Fetched authentic host metrics.', 'success');
+        onAddToast('Diagnostics synced', 'Fetched authentic host metrics and runtime status.', 'success');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Diagnostic retrieval failed';
@@ -59,11 +72,37 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
     loadDiagnostics(false);
   }, [loadDiagnostics]);
 
+  const handleRunBenchmark = async (providerId: ProviderId) => {
+    setIsBenchmarking(true);
+    try {
+      onAddToast('Benchmark Started', `Measuring authentic inference latency on ${providerId.toUpperCase()}...`, 'info');
+      const res = await executeBenchmark(providerId, undefined, benchmarkRuns);
+      setBenchmarkResult(res);
+      onAddToast(
+        'Benchmark Complete',
+        `Avg latency: ${res.average_latency_ms} ms (${res.successful_runs}/${res.runs} successful runs).`,
+        'success'
+      );
+      // Refresh runtime telemetry
+      loadDiagnostics(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Benchmark execution failed';
+      onAddToast('Benchmark Failed', msg, 'error');
+    } finally {
+      setIsBenchmarking(false);
+    }
+  };
+
   const handleCopyRaw = () => {
-    if (!metrics) return;
-    navigator.clipboard.writeText(JSON.stringify(metrics, null, 2));
+    const rawPayload = {
+      system_metrics: metrics,
+      runtime_engine: runtime,
+      last_benchmark: benchmarkResult,
+      exported_at: new Date().toISOString(),
+    };
+    navigator.clipboard.writeText(JSON.stringify(rawPayload, null, 2));
     setCopied(true);
-    onAddToast('Raw JSON copied', 'Copied diagnostic payload to clipboard.', 'info');
+    onAddToast('Raw JSON copied', 'Copied full diagnostic & runtime telemetry payload.', 'info');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -71,7 +110,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
     <div className="nexus-diag-page animate-fade-in">
       <PageHeader
         title="ADVANCED DIAGNOSTICS"
-        subtitle="Low-level engineering diagnostics, host operating system, and truthful acceleration status."
+        subtitle="Low-level engineering diagnostics, host operating system, and hardware-aware AI runtime intelligence."
         breadcrumbs={[
           { label: 'Settings', onClick: () => onNavigate('settings') },
           { label: 'Advanced Diagnostics' },
@@ -93,7 +132,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
       <div className="nexus-diag-disclosure" role="alert">
         <ShieldCheck size={18} className="text-cyan flex-shrink-0" />
         <div className="nexus-diag-disclosure-text">
-          <span className="nexus-diag-disclosure-title">Truthful Hardware Disclosure</span>
+          <span className="nexus-diag-disclosure-title">Truthful Hardware Disclosure Policy</span>
           <p>
             Hardware acceleration metrics reflect authentic detected devices only. NEXUS EDGE strictly avoids synthetic benchmark generation, fabricated NPU TOPS, or unverified acceleration states.
           </p>
@@ -106,6 +145,13 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
           <span>Local edge service unreachable: displaying baseline host fallback. ({errorMsg})</span>
         </div>
       )}
+
+      {/* PHASE 2 AI RUNTIME ENGINE STATUS CARD */}
+      <RuntimeStatusCard
+        runtime={runtime}
+        onRunBenchmark={handleRunBenchmark}
+        isBenchmarking={isBenchmarking}
+      />
 
       {/* Main Diagnostics Grid */}
       <div className="nexus-diag-grid">
@@ -143,19 +189,25 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Total Memory</span>
               <span className="nexus-diag-prop-val nexus-mono-val">
-                {metrics?.system.total_memory_gb ? `${metrics.system.total_memory_gb} GB` : 'Not available'}
+                {metrics?.system.total_memory_gb !== null && metrics?.system.total_memory_gb !== undefined
+                  ? `${metrics.system.total_memory_gb} GB`
+                  : 'Not available'}
               </span>
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Available Memory</span>
               <span className="nexus-diag-prop-val nexus-mono-val">
-                {metrics?.system.available_memory_gb ? `${metrics.system.available_memory_gb} GB` : 'Not available'}
+                {metrics?.system.available_memory_gb !== null && metrics?.system.available_memory_gb !== undefined
+                  ? `${metrics.system.available_memory_gb} GB`
+                  : 'Not available'}
               </span>
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Memory Usage</span>
               <span className="nexus-diag-prop-val nexus-mono-val">
-                {metrics?.system.memory_usage_percent ? `${metrics.system.memory_usage_percent}%` : 'Unknown'}
+                {metrics?.system.memory_usage_percent !== null && metrics?.system.memory_usage_percent !== undefined
+                  ? `${metrics.system.memory_usage_percent}%`
+                  : 'Unknown'}
               </span>
             </div>
           </div>
@@ -173,33 +225,41 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
 
           <div className="nexus-diag-props-list">
             <div className="nexus-diag-prop">
-              <span className="nexus-diag-prop-key">Runtime Status</span>
+              <span className="nexus-diag-prop-key">Runtime State</span>
               <span className="nexus-diag-prop-val">
-                <StatusBadge status={isLive ? 'ready' : 'limited'} size="sm" label={metrics?.runtime.status || 'Ready'} />
+                <StatusBadge 
+                  status={runtime.runtime_state === 'READY' ? 'ready' : 'limited'} 
+                  size="sm" 
+                  label={runtime.runtime_state} 
+                />
               </span>
             </div>
             <div className="nexus-diag-prop">
-              <span className="nexus-diag-prop-key">Provider</span>
-              <span className="nexus-diag-prop-val">{metrics?.runtime.provider || 'NEXUS Local Edge Engine'}</span>
-            </div>
-            <div className="nexus-diag-prop">
-              <span className="nexus-diag-prop-key">Model Pipeline</span>
-              <span className="nexus-diag-prop-val nexus-val-unconfigured">
-                {metrics?.runtime.model || 'Not configured (Phase 2)'}
+              <span className="nexus-diag-prop-key">Active Provider</span>
+              <span className="nexus-diag-prop-val nexus-mono-val text-cyan font-semibold">
+                {runtime.active_provider.toUpperCase()}
               </span>
             </div>
             <div className="nexus-diag-prop">
-              <span className="nexus-diag-prop-key">Execution Mode</span>
-              <span className="nexus-diag-prop-val">{metrics?.runtime.execution_mode || 'Local Edge UI Shell'}</span>
+              <span className="nexus-diag-prop-key">Active Model</span>
+              <span className="nexus-diag-prop-val nexus-mono-val">
+                {runtime.active_model}
+              </span>
+            </div>
+            <div className="nexus-diag-prop">
+              <span className="nexus-diag-prop-key">Fallback Status</span>
+              <span className={`nexus-diag-prop-val ${runtime.selection.fallback_used ? 'text-amber' : 'text-green'}`}>
+                {runtime.selection.fallback_used ? 'Fallback Active' : 'Primary Path'}
+              </span>
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Phase Status</span>
-              <span className="nexus-diag-prop-val">{metrics?.runtime.phase || 'Phase 1 - Product Foundation'}</span>
+              <span className="nexus-diag-prop-val text-blue">Phase 2: AI Runtime Engine</span>
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Privacy Boundary</span>
               <span className="nexus-diag-prop-val text-cyan">
-                {metrics?.runtime.privacy_boundary || 'Local-only / Zero Cloud Telemetry'}
+                Local-only / Zero Cloud Telemetry
               </span>
             </div>
           </div>
@@ -220,49 +280,127 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
               <span className="nexus-diag-prop-key">CPU Execution</span>
               <span className="nexus-diag-prop-val text-green">
                 <CheckCircle2 size={13} className="text-green" />
-                <span>{metrics?.acceleration.cpu || 'Detected'}</span>
+                <span>Detected (Baseline Ready)</span>
               </span>
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">GPU Device</span>
               <span className="nexus-diag-prop-val nexus-val-unconfigured">
-                {metrics?.acceleration.gpu || 'Not configured'}
+                {runtime.hardware.gpuDeviceDetected
+                  ? (runtime.hardware.gpuDeviceName || 'Detected')
+                  : 'Not detected'}
               </span>
             </div>
             <div className="nexus-diag-prop">
-              <span className="nexus-diag-prop-key">NPU Availability</span>
-              <span className="nexus-diag-prop-val nexus-val-unconfigured">
-                {metrics?.acceleration.npu || 'Not detected'}
+              <span className="nexus-diag-prop-key">GPU Inference Provider</span>
+              <span className={`nexus-diag-prop-val ${runtime.hardware.gpuInferenceProviderAvailable ? 'text-green' : 'nexus-val-unconfigured'}`}>
+                {runtime.hardware.gpuInferenceProviderAvailable ? 'Available' : 'Not configured'}
               </span>
             </div>
             <div className="nexus-diag-prop">
-              <span className="nexus-diag-prop-key">Snapdragon / QNN Runtime</span>
+              <span className="nexus-diag-prop-key">Snapdragon Hardware</span>
+              <span className={`nexus-diag-prop-val ${runtime.hardware.snapdragonDetected ? 'text-green' : 'nexus-val-unconfigured'}`}>
+                {runtime.hardware.snapdragonDetected ? 'Detected' : 'Not detected'}
+              </span>
+            </div>
+            <div className="nexus-diag-prop">
+              <span className="nexus-diag-prop-key">Qualcomm QNN Runtime</span>
               <span className="nexus-diag-prop-val nexus-val-unconfigured">
-                {metrics?.acceleration.qnn_runtime || 'Not configured (Edge target runtime)'}
+                {runtime.hardware.qnnStatus.replace('_', ' ')}
               </span>
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">TOPS Acceleration Rating</span>
               <span className="nexus-diag-prop-val nexus-val-unknown">
-                {metrics?.acceleration.tops_rating || 'Unknown'}
-              </span>
-            </div>
-            <div className="nexus-diag-prop">
-              <span className="nexus-diag-prop-key">Active Inference Engine</span>
-              <span className="nexus-diag-prop-val nexus-mono-val">
-                {metrics?.acceleration.inference_engine || 'CPU Fallback (Phase 1 Baseline)'}
+                {runtime.hardware.npuAvailable ? 'Hardware Rated' : 'Unknown'}
               </span>
             </div>
           </div>
         </Card>
       </div>
 
+      {/* BENCHMARKING SECTION */}
+      <Card variant="default" padding="md" className="nexus-diag-card">
+        <div className="nexus-diag-card-header">
+          <div className="nexus-diag-card-title-wrap">
+            <ActivityIcon size={18} className="text-blue" />
+            <h2 className="nexus-diag-card-title">RUNTIME BENCHMARKING & LATENCY</h2>
+          </div>
+          <div className="nexus-bench-controls">
+            <label htmlFor="bench-runs-select" className="text-xs text-secondary">Runs:</label>
+            <select
+              id="bench-runs-select"
+              className="nexus-bench-select"
+              value={benchmarkRuns}
+              onChange={(e) => setBenchmarkRuns(Number(e.target.value))}
+            >
+              <option value={3}>3 iterations</option>
+              <option value={5}>5 iterations</option>
+              <option value={10}>10 iterations</option>
+            </select>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Play size={13} />}
+              isLoading={isBenchmarking}
+              onClick={() => handleRunBenchmark(runtime.active_provider)}
+            >
+              Execute Benchmark
+            </Button>
+          </div>
+        </div>
+
+        {benchmarkResult ? (
+          <div className="nexus-bench-results-panel animate-fade-in">
+            <div className="nexus-bench-metrics-row">
+              <div className="nexus-bench-metric">
+                <span className="nexus-bench-label">PROVIDER</span>
+                <span className="nexus-bench-val text-cyan">{benchmarkResult.provider.toUpperCase()}</span>
+              </div>
+              <div className="nexus-bench-metric">
+                <span className="nexus-bench-label">AVERAGE LATENCY</span>
+                <span className="nexus-bench-val nexus-mono-val">{benchmarkResult.average_latency_ms} ms</span>
+              </div>
+              <div className="nexus-bench-metric">
+                <span className="nexus-bench-label">MIN LATENCY</span>
+                <span className="nexus-bench-val nexus-mono-val">{benchmarkResult.min_latency_ms} ms</span>
+              </div>
+              <div className="nexus-bench-metric">
+                <span className="nexus-bench-label">MAX LATENCY</span>
+                <span className="nexus-bench-val nexus-mono-val">{benchmarkResult.max_latency_ms} ms</span>
+              </div>
+              <div className="nexus-bench-metric">
+                <span className="nexus-bench-label">RUNS SUCCESS</span>
+                <span className="nexus-bench-val text-green">
+                  {benchmarkResult.successful_runs} / {benchmarkResult.runs}
+                </span>
+              </div>
+            </div>
+
+            <div className="nexus-bench-latencies-list">
+              <span className="nexus-bench-subhead">Measured Run Latencies (ms):</span>
+              <div className="nexus-latency-tags">
+                {benchmarkResult.latencies.map((lat, idx) => (
+                  <span key={idx} className="nexus-lat-pill">
+                    #{idx + 1}: {lat} ms
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="nexus-bench-placeholder">
+            <p>No benchmark executed for this session. Click &quot;Execute Benchmark&quot; to test real execution latency on the active provider.</p>
+          </div>
+        )}
+      </Card>
+
       {/* Raw Diagnostic JSON Inspector */}
       <Card variant="elevated" padding="md" className="nexus-raw-diag-card">
         <div className="nexus-raw-header">
           <div className="nexus-raw-title-wrap">
             <Terminal size={16} className="text-blue" />
-            <h3 className="nexus-raw-title">Diagnostic Telemetry Payload</h3>
+            <h3 className="nexus-raw-title">Diagnostic & Runtime Telemetry Payload</h3>
           </div>
           <Button
             variant="outline"
@@ -275,7 +413,15 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
         </div>
 
         <pre className="nexus-raw-code" tabIndex={0} aria-label="Raw Diagnostic JSON">
-          {metrics ? JSON.stringify(metrics, null, 2) : '// Awaiting diagnostic polling...'}
+          {JSON.stringify(
+            {
+              system_metrics: metrics,
+              runtime_engine: runtime,
+              last_benchmark: benchmarkResult,
+            },
+            null,
+            2
+          )}
         </pre>
       </Card>
     </div>

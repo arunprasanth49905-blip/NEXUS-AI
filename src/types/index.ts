@@ -1,7 +1,9 @@
 /**
- * NEXUS EDGE Type Definitions
- * Phase 1: Product Foundation
+ * NEXUS EDGE Central Type Definitions
+ * Phase 1 + Phase 2 (Runtime Intelligence Engine)
  */
+
+export * from './runtime';
 
 export type NavPage = 
   | 'home' 
@@ -26,6 +28,7 @@ export interface HealthResponse {
   timestamp: string;
   runtime_ready: boolean;
   privacy: string;
+  active_provider?: string;
 }
 
 export interface SystemMetrics {
@@ -37,9 +40,9 @@ export interface SystemMetrics {
     processor: string;
     cpu_physical_cores: number | string;
     cpu_logical_threads: number | string;
-    total_memory_gb: number;
-    available_memory_gb: number;
-    memory_usage_percent: number;
+    total_memory_gb: number | null;
+    available_memory_gb: number | null;
+    memory_usage_percent: number | null;
   };
   runtime: {
     status: string;
@@ -68,6 +71,7 @@ export interface ContextInfo {
   boundary: string;
   active_sources: number;
   phase: string;
+  active_model?: string;
 }
 
 export interface ChatMessage {
@@ -76,6 +80,10 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   executionMode?: string;
+  provider?: string;
+  latencyMs?: number;
+  fallbackUsed?: boolean;
+  fallbackReason?: string | null;
   isStreaming?: boolean;
 }
 
@@ -94,7 +102,7 @@ export interface ActivityEntry {
   timestamp: string;
   relativeTime: string;
   title: string;
-  category: 'query' | 'context' | 'system' | 'session';
+  category: 'query' | 'context' | 'system' | 'session' | 'inference';
   details?: string;
   isDemo?: boolean;
 }

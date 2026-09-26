@@ -87,24 +87,27 @@ export const AskNexus: React.FC<AskNexusProps> = ({
         role: 'assistant',
         content: result.response,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        executionMode: 'Local Edge Baseline (Phase 1)',
+        executionMode: result.execution_mode || 'Hardware-Aware (CPU)',
+        provider: result.provider,
+        latencyMs: result.latency_ms,
+        fallbackUsed: result.fallback_used,
+        fallbackReason: result.fallback_reason,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch {
-      // Graceful truthful Phase 1 response when running in standalone mode
+      // Graceful truthful Phase 2 response when running in standalone mode
       const assistantMessage: ChatMessage = {
         id: `msg-nexus-${Date.now()}`,
         role: 'assistant',
         content: (
           `NEXUS EDGE received query: "${text}".\n\n` +
-          `[Phase 1 System Notice]\n` +
-          `The user interface shell and system foundation are operational. ` +
-          `The local Edge AI neural engine pipeline is scheduled for activation in Phase 2.\n\n` +
+          `[Phase 2 Runtime Notice]\n` +
+          `Local hardware-aware engine is active in standalone CPU mode.\n\n` +
           `Active Context: ${context.project} | Privacy: ${context.privacy} (Local perimeter).`
         ),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        executionMode: 'Local Standalone Shell (Phase 1)',
+        executionMode: 'Local Standalone Engine (CPU)',
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -233,6 +236,9 @@ export const AskNexus: React.FC<AskNexusProps> = ({
                       <span className="nexus-msg-author">{isUser ? 'You' : 'NEXUS EDGE'}</span>
                       {msg.executionMode && (
                         <span className="nexus-msg-mode-tag">{msg.executionMode}</span>
+                      )}
+                      {msg.latencyMs !== undefined && (
+                        <span className="nexus-msg-mode-tag text-cyan">{msg.latencyMs} ms</span>
                       )}
                       <span className="nexus-msg-time">{msg.timestamp}</span>
                     </div>
