@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Activity as ActivityIcon, 
   MessageSquare, 
@@ -8,13 +8,15 @@ import {
   Download, 
   Trash2, 
   Info,
-  CheckCircle2
+  CheckCircle2,
+  Bot
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import type { ActivityEntry } from '../types';
+import { agentService } from '../services/agent';
 import './Activity.css';
 
 export interface ActivityProps {
@@ -24,6 +26,51 @@ export interface ActivityProps {
 export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
   const [filter, setFilter] = useState<string>('all');
   const [activities, setActivities] = useState<ActivityEntry[]>([
+    {
+      id: 'a-p5-1',
+      timestamp: 'Today, 11:15 AM',
+      relativeTime: '11:15',
+      title: 'Verification completed',
+      category: 'agent',
+      details: 'All 4 plan steps verified successfully with valid DAG integrity.',
+      isDemo: true,
+    },
+    {
+      id: 'a-p5-2',
+      timestamp: 'Today, 11:14 AM',
+      relativeTime: '11:14',
+      title: 'Execution is waiting for approval',
+      category: 'agent',
+      details: 'Elevated risk action paused pending user approval gate confirmation.',
+      isDemo: true,
+    },
+    {
+      id: 'a-p5-3',
+      timestamp: 'Today, 11:12 AM',
+      relativeTime: '11:12',
+      title: 'Knowledge Agent extracted key findings',
+      category: 'agent',
+      details: 'Synthesized architectural report insights and identified technical gaps.',
+      isDemo: true,
+    },
+    {
+      id: 'a-p5-4',
+      timestamp: 'Today, 11:10 AM',
+      relativeTime: '11:10',
+      title: 'Document Agent completed analysis',
+      category: 'agent',
+      details: 'Processed report document and extracted structured sections and tables.',
+      isDemo: true,
+    },
+    {
+      id: 'a-p5-5',
+      timestamp: 'Today, 11:09 AM',
+      relativeTime: '11:09',
+      title: 'Document Agent started analyzing the report',
+      category: 'agent',
+      details: 'Initiated Phase 3 document perception and markdown/table extraction.',
+      isDemo: true,
+    },
     {
       id: 'a-1',
       timestamp: 'Today, 10:42 AM',
@@ -71,6 +118,27 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
     },
   ]);
 
+  useEffect(() => {
+    // Load authentic execution records from backend if present
+    agentService
+      .getExecutions()
+      .then((res) => {
+        if (res.executions && res.executions.length > 0) {
+          const liveEntries: ActivityEntry[] = res.executions.map((e) => ({
+            id: `exec-${e.execution_id}`,
+            timestamp: new Date(e.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            relativeTime: 'Recent',
+            title: `${e.agent_id} completed step ${e.step_id || ''}`,
+            category: 'agent',
+            details: `Status: ${e.status}. Latency/Execution recorded in local orchestrator.`,
+            isDemo: false,
+          }));
+          setActivities((prev) => [...liveEntries, ...prev.filter((p) => p.isDemo)]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const filtered = activities.filter((item) => {
     if (filter === 'all') return true;
     return item.category === filter;
@@ -78,6 +146,9 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
+      case 'agent':
+      case 'orchestration':
+        return <Bot size={15} className="text-cyan" />;
       case 'query':
         return <MessageSquare size={15} className="text-blue" />;
       case 'context':
@@ -157,6 +228,7 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
       <div className="nexus-activity-filter-bar">
         {[
           { id: 'all', label: 'All Activity' },
+          { id: 'agent', label: 'Agents & Plans' },
           { id: 'query', label: 'Queries' },
           { id: 'context', label: 'Context Events' },
           { id: 'system', label: 'System & Diagnostics' },

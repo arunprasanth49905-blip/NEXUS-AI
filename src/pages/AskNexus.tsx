@@ -20,8 +20,11 @@ import { Button } from '../components/ui/Button';
 import { CameraModal } from '../components/ui/CameraModal';
 import { ContextPreviewBar } from '../components/ui/ContextPreviewBar';
 import { ContextPanel } from '../components/ui/ContextPanel';
+import { PlanExecutionCard } from '../components/ui/PlanExecutionCard';
 import type { ChatMessage, ContextInfo, NexusContextObject } from '../types';
+import type { OrchestrationTask, TaskPlan, OrchestrationResult } from '../types/agent';
 import { api } from '../services/api';
+import { agentService } from '../services/agent';
 import { PerceptionService } from '../services/perception';
 import './AskNexus.css';
 
@@ -64,11 +67,22 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     estimated_tokens?: number;
   }>({});
 
+  // Phase 5 Agent Orchestration & Planning State
+  const [currentTask, setCurrentTask] = useState<OrchestrationTask | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<TaskPlan | null>(null);
+  const [currentResult, setCurrentResult] = useState<OrchestrationResult | null>(null);
+  const [isExecutingPlan, setIsExecutingPlan] = useState(false);
+
   const starterExamples = [
     {
+      title: 'Plan Multi-Step Task',
+      desc: 'Analyze report, identify gaps, structure presentation',
+      prompt: 'Analyze my project report, identify technical gaps, and create a presentation structure.',
+    },
+    {
       title: 'Analyze System Architecture',
-      desc: 'Evaluate Phase 1-4 edge capabilities and runtime layer',
-      prompt: 'Analyze how the Phase 2 runtime engine interacts with Phase 4 context intelligence and memory.',
+      desc: 'Evaluate Phase 1-5 edge capabilities and runtime layer',
+      prompt: 'Analyze how the Phase 2 runtime engine interacts with Phase 5 agent orchestration.',
     },
     {
       title: 'Fix Deployment Failure',
@@ -107,7 +121,43 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     setIsLoading(true);
 
     try {
-      // Call backend API with query and attached multimodal context IDs
+      // 1. Check if user request is a multi-step workflow or requests a plan
+      const lower = text.toLowerCase();
+      const isMultiStepGoal = (lower.includes('analyze') && lower.includes('identify') && lower.includes('create')) ||
+        lower.startsWith('create a plan') ||
+        lower.includes('technical gaps') ||
+        lower.includes('presentation structure') ||
+        lower.includes('plan for');
+
+      if (isMultiStepGoal) {
+        try {
+          const taskRes = await agentService.createTask(text, { attachedContextIds: currentContextIds });
+          if (taskRes.task && taskRes.plan) {
+            setCurrentTask(taskRes.task);
+            setCurrentPlan(taskRes.plan);
+            setCurrentResult(null);
+            if (taskRes.task.task_type) {
+              setActiveTask(taskRes.task.task_type);
+            }
+
+            const assistantMessage: ChatMessage = {
+              id: `msg-nexus-${Date.now()}`,
+              role: 'assistant',
+              content: `I have analyzed your objective and decomposed it into a ${taskRes.task.complexity.toLowerCase()} execution plan with ${taskRes.plan.steps.length} steps across specialized agents. Review the plan below and click "Run Plan" to execute.`,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              executionMode: `Agent Orchestrator (${taskRes.plan.steps.length} Steps Planned)`,
+            };
+
+            setMessages((prev) => [...prev, assistantMessage]);
+            setIsLoading(false);
+            return;
+          }
+        } catch {
+          // Fall back to standard query if planning endpoint fails
+        }
+      }
+
+      // 2. Call backend API with query and attached multimodal context IDs
       const result = await api.sendAssistantQuery(text, currentContextIds);
 
       if (result.context_understanding) {
@@ -152,6 +202,84 @@ export const AskNexus: React.FC<AskNexusProps> = ({
       setIsLoading(false);
     }
   }, [inputVal, isLoading, attachedContexts, context.project, context.privacy]);
+
+  // Phase 5 Plan Execution Handlers
+  const handleExecutePlan = async (taskId: string) => {
+    setIsExecutingPlan(true);
+    onAddToast('Plan Execution Started', 'Coordinating agents across dependency graph...', 'info');
+    try {
+      const res = await agentService.executeTask(taskId);
+      setCurrentResult(res);
+      if (res.plan) setCurrentPlan(res.plan);
+      setCurrentTask((prev) => (prev ? { ...prev, status: res.status } : null));
+
+      const assistantMessage: ChatMessage = {
+        id: `msg-nexus-exec-${Date.now()}`,
+        role: 'assistant',
+        content: res.final_output,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        executionMode: `Orchestrator (${res.verification.state})`,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      if (res.status === 'WAITING_FOR_APPROVAL') {
+        onAddToast('Action Requires Approval', 'Execution paused: user confirmation required.', 'warning');
+      } else if (res.status === 'COMPLETED') {
+        onAddToast('Plan Completed', `Verified: ${res.verification.completed_steps}/${res.verification.total_steps} steps.`, 'success');
+      } else {
+        onAddToast('Plan Execution Notice', `Execution ended with status ${res.status}.`, 'warning');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Execution error';
+      onAddToast('Execution Failed', msg, 'error');
+    } finally {
+      setIsExecutingPlan(false);
+    }
+  };
+
+  const handleCancelTask = async (taskId: string) => {
+    try {
+      await agentService.cancelTask(taskId);
+      setCurrentTask((prev) => (prev ? { ...prev, status: 'CANCELLED' } : null));
+      if (currentPlan) {
+        setCurrentPlan({ ...currentPlan, status: 'CANCELLED' });
+      }
+      onAddToast('Task Cancelled', 'Execution stopped safely; completed outputs preserved.', 'info');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Cancellation error';
+      onAddToast('Cancel Failed', msg, 'error');
+    }
+  };
+
+  const handleApproveAction = async (approvalId: string) => {
+    try {
+      onAddToast('Approval Granted', 'Resuming agent plan...', 'info');
+      const res = await agentService.approveAction(approvalId);
+      if (res.result) {
+        setCurrentResult(res.result);
+        if (res.result.plan) setCurrentPlan(res.result.plan);
+        setCurrentTask((prev) => (prev ? { ...prev, status: res.result!.status } : null));
+      }
+      onAddToast('Action Approved', 'Agent resumed and completed execution.', 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Approval error';
+      onAddToast('Approval Error', msg, 'error');
+    }
+  };
+
+  const handleRejectAction = async (approvalId: string) => {
+    try {
+      await agentService.rejectAction(approvalId);
+      onAddToast('Action Rejected', 'Step was skipped / cancelled per user decision.', 'warning');
+      if (currentTask) {
+        setCurrentTask({ ...currentTask, status: 'CANCELLED' });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Rejection error';
+      onAddToast('Rejection Error', msg, 'error');
+    }
+  };
 
   // If initialQuery passed from Home, send or prefill
   useEffect(() => {
@@ -448,6 +576,20 @@ export const AskNexus: React.FC<AskNexusProps> = ({
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Phase 5 Interactive Plan & Execution Card */}
+            {currentTask && currentPlan && (
+              <PlanExecutionCard
+                task={currentTask}
+                plan={currentPlan}
+                result={currentResult}
+                isRunning={isExecutingPlan}
+                onExecutePlan={handleExecutePlan}
+                onCancelTask={handleCancelTask}
+                onApproveAction={handleApproveAction}
+                onRejectAction={handleRejectAction}
+              />
             )}
 
             <div ref={messagesEndRef} />

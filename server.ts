@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { RuntimeManager } from './server/manager.js';
 import { PerceptionManager } from './server/perception/manager.js';
 import { ContextMemoryEngine } from './server/context_memory/manager.js';
+import { AgentOrchestrator } from './server/agents/orchestrator.js';
 import type { ProviderId } from './src/types/runtime.js';
 import type { ScreenCaptureRequest, CameraCaptureRequest, VoiceTranscriptionRequest } from './src/types/perception.js';
 import type { MemoryType } from './src/types/context_memory.js';
@@ -33,8 +34,8 @@ app.use((_req, res, next) => {
 });
 
 const PROJECT_NAME = 'NEXUS EDGE';
-const VERSION = '0.4.0';
-const PHASE = 'Phase 4 - Context Intelligence & Memory';
+const VERSION = '0.5.0';
+const PHASE = 'Phase 5 - Agent Orchestration & Intelligent Task Planning';
 const TAGLINE = "Understand what you're doing. Get intelligent help. Keep your data private.";
 
 // Instantiate Hardware-Aware AI Runtime Manager (Phase 2)
@@ -48,6 +49,9 @@ const perceptionManager = PerceptionManager.getInstance();
 
 // Instantiate Context Intelligence & Memory Engine (Phase 4)
 const contextMemoryEngine = ContextMemoryEngine.getInstance();
+
+// Instantiate Agent Orchestration & Task Planning Engine (Phase 5)
+const agentOrchestrator = AgentOrchestrator.getInstance({ runtimeManager });
 
 // 1. Health check
 app.get('/api/v1/health', (_req, res) => {
@@ -397,25 +401,228 @@ app.post('/api/v1/context/session', (req, res) => {
   res.json({ session });
 });
 
-// 3. Active Task Management
+// ----------------------------------------------------
+// PHASE 4 & PHASE 5 TASK & AGENT ORCHESTRATION APIS
+// ----------------------------------------------------
+
+// Active Task Management (Phase 4 backward compatibility)
 app.get('/api/v1/tasks/current', (_req, res) => {
   res.json({ active_task: contextMemoryEngine.getActiveTask() });
-});
-
-app.post('/api/v1/tasks', (req, res) => {
-  const title = req.body?.title;
-  const description = req.body?.description || 'User-initiated task';
-  if (!title) {
-    res.status(400).json({ error: 'Task title is required' });
-    return;
-  }
-  const task = contextMemoryEngine.setActiveTask(title, description);
-  res.json({ active_task: task });
 });
 
 app.delete('/api/v1/tasks/current', (_req, res) => {
   contextMemoryEngine.clearActiveTask();
   res.json({ success: true, message: 'Active task cleared.' });
+});
+
+// Phase 5 Task Creation & Planning
+app.post('/api/v1/tasks', (req, res) => {
+  const userRequest = req.body?.user_request || req.body?.prompt;
+  const title = req.body?.title;
+  const description = req.body?.description || 'User-initiated task';
+  const context = req.body?.context || {};
+
+  if (!userRequest && !title) {
+    res.status(400).json({ error: 'Either user_request or title is required.' });
+    return;
+  }
+
+  // Anchor active task in Phase 4 context memory engine
+  const activeTaskTitle = title || (userRequest.length > 50 ? `${userRequest.slice(0, 47)}...` : userRequest);
+  const activeTask = contextMemoryEngine.setActiveTask(activeTaskTitle, description);
+
+  // Create Phase 5 Orchestration Task & Decomposed Plan
+  const effectiveRequest = userRequest || `${title}: ${description}`;
+  const { task, plan } = agentOrchestrator.createTaskAndPlan({
+    user_request: effectiveRequest,
+    session_id: contextMemoryEngine.getSession().session_id,
+    context: { ...context, title },
+  });
+
+  res.json({
+    active_task: activeTask,
+    task,
+    plan,
+  });
+});
+
+// List all orchestration tasks
+app.get('/api/v1/tasks', (_req, res) => {
+  res.json({
+    tasks: agentOrchestrator.listTasks(),
+  });
+});
+
+// Get specific task
+app.get('/api/v1/tasks/:task_id', (req, res) => {
+  const task = agentOrchestrator.getTask(req.params.task_id);
+  if (!task) {
+    res.status(404).json({ error: `Task '${req.params.task_id}' not found.` });
+    return;
+  }
+  res.json({ task });
+});
+
+// Generate or retrieve plan for task
+app.post('/api/v1/tasks/:task_id/plan', (req, res) => {
+  const task = agentOrchestrator.getTask(req.params.task_id);
+  if (!task) {
+    res.status(404).json({ error: `Task '${req.params.task_id}' not found.` });
+    return;
+  }
+  if (!task.plan) {
+    const { plan } = agentOrchestrator.createTaskAndPlan({
+      user_request: task.user_request,
+      task_id: task.task_id,
+      session_id: task.session_id,
+      context: task.context,
+    });
+    res.json({ plan });
+    return;
+  }
+  res.json({ plan: task.plan });
+});
+
+app.get('/api/v1/tasks/:task_id/plan', (req, res) => {
+  const task = agentOrchestrator.getTask(req.params.task_id);
+  if (!task || !task.plan) {
+    res.status(404).json({ error: `Plan for task '${req.params.task_id}' not found.` });
+    return;
+  }
+  res.json({ plan: task.plan });
+});
+
+// Execute task plan through DAG
+app.post('/api/v1/tasks/:task_id/execute', async (req, res) => {
+  try {
+    const result = await agentOrchestrator.executePlan(req.params.task_id);
+    res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Execution failed';
+    res.status(400).json({ error: msg });
+  }
+});
+
+// Get task status
+app.get('/api/v1/tasks/:task_id/status', (req, res) => {
+  const task = agentOrchestrator.getTask(req.params.task_id);
+  if (!task) {
+    res.status(404).json({ error: `Task '${req.params.task_id}' not found.` });
+    return;
+  }
+  res.json({
+    task_id: task.task_id,
+    status: task.status,
+    plan_id: task.plan_id,
+    plan_status: task.plan?.status,
+    steps: task.plan?.steps,
+  });
+});
+
+// Cancel task
+app.post('/api/v1/tasks/:task_id/cancel', (req, res) => {
+  const success = agentOrchestrator.cancelTask(req.params.task_id);
+  if (!success) {
+    res.status(404).json({ error: `Task '${req.params.task_id}' not found or cannot be cancelled.` });
+    return;
+  }
+  res.json({ success: true, task_id: req.params.task_id, status: 'CANCELLED' });
+});
+
+// ----------------------------------------------------
+// AGENT REGISTRY & CAPABILITY APIS
+// ----------------------------------------------------
+
+app.get('/api/v1/agents', (_req, res) => {
+  const agents = agentOrchestrator.getRegistry().list();
+  res.json({
+    agents,
+    total: agents.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/v1/agents/capabilities', (_req, res) => {
+  const agents = agentOrchestrator.getRegistry().getAll();
+  const capMap: Record<string, string[]> = {};
+  for (const agent of agents) {
+    for (const cap of agent.capabilities) {
+      if (!capMap[cap]) capMap[cap] = [];
+      capMap[cap].push(agent.agent_id);
+    }
+  }
+  res.json({
+    capabilities: capMap,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/v1/agents/:agent_id', (req, res) => {
+  const agent = agentOrchestrator.getRegistry().get(req.params.agent_id);
+  if (!agent) {
+    res.status(404).json({ error: `Agent '${req.params.agent_id}' not found.` });
+    return;
+  }
+  res.json({ agent: agent.getInfo() });
+});
+
+// ----------------------------------------------------
+// APPROVAL GATE APIS
+// ----------------------------------------------------
+
+app.get('/api/v1/approvals', (_req, res) => {
+  res.json({
+    approvals: agentOrchestrator.getApprovalGate().listPending(),
+  });
+});
+
+app.post('/api/v1/approvals/:approval_id/approve', async (req, res) => {
+  const resolution = agentOrchestrator.getApprovalGate().resolve(req.params.approval_id, 'APPROVED');
+  if (!resolution.success) {
+    res.status(400).json({ error: resolution.error });
+    return;
+  }
+
+  try {
+    const approval = resolution.approval!;
+    const executionResult = await agentOrchestrator.resumeAfterApproval(approval.task_id, approval.approval_id);
+    res.json({ success: true, approval, result: executionResult });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error resuming after approval';
+    res.status(500).json({ error: msg });
+  }
+});
+
+app.post('/api/v1/approvals/:approval_id/reject', (req, res) => {
+  const resolution = agentOrchestrator.getApprovalGate().resolve(req.params.approval_id, 'REJECTED');
+  if (!resolution.success) {
+    res.status(400).json({ error: resolution.error });
+    return;
+  }
+  res.json({ success: true, approval: resolution.approval });
+});
+
+// ----------------------------------------------------
+// EXECUTION ENGINE APIS & ADVANCED DIAGNOSTICS STATUS
+// ----------------------------------------------------
+
+app.get('/api/v1/executions', (_req, res) => {
+  res.json({
+    executions: agentOrchestrator.getExecutionEngine().listExecutions(),
+  });
+});
+
+app.get('/api/v1/executions/:execution_id', (req, res) => {
+  const exec = agentOrchestrator.getExecutionEngine().getExecution(req.params.execution_id);
+  if (!exec) {
+    res.status(404).json({ error: `Execution '${req.params.execution_id}' not found.` });
+    return;
+  }
+  res.json({ execution: exec });
+});
+
+app.get('/api/v1/orchestrator/status', (_req, res) => {
+  res.json(agentOrchestrator.getStatusReport());
 });
 
 // 4. Memory List & Search
@@ -572,6 +779,7 @@ app.get('/api/info', async (_req, res) => {
     runtime: runtimeManager.getRuntimeStatus(),
     perception: perceptionManager.getStatus(),
     context_memory: await contextMemoryEngine.getStatus(),
+    orchestrator: agentOrchestrator.getStatusReport(),
   });
 });
 

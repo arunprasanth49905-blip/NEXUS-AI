@@ -6,6 +6,7 @@
 export * from './runtime';
 export * from './perception';
 export * from './context_memory';
+export * from './agent';
 
 export type NavPage = 
   | 'home' 
@@ -118,7 +119,7 @@ export interface ActivityEntry {
   timestamp: string;
   relativeTime: string;
   title: string;
-  category: 'query' | 'context' | 'system' | 'session' | 'inference';
+  category: 'query' | 'context' | 'system' | 'session' | 'inference' | 'agent' | 'orchestration';
   details?: string;
   isDemo?: boolean;
 }
