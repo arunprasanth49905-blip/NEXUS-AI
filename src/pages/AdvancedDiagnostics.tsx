@@ -82,7 +82,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
             size="sm"
             isLoading={isLoading}
             leftIcon={<RefreshCw size={14} />}
-            onClick={loadDiagnostics}
+            onClick={() => loadDiagnostics(true)}
           >
             Refresh Diagnostics
           </Button>

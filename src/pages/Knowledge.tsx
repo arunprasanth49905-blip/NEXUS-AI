@@ -71,8 +71,8 @@ export const Knowledge: React.FC<KnowledgeProps> = ({ onAddToast }) => {
     return matchesFilter && matchesSearch;
   });
 
-  const handleAddItem = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddItem = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     if (!newTitle.trim()) return;
 
     const newItem: KnowledgeItem = {
@@ -240,7 +240,7 @@ export const Knowledge: React.FC<KnowledgeProps> = ({ onAddToast }) => {
               variant="primary"
               size="md"
               disabled={!newTitle.trim()}
-              onClick={handleAddItem}
+              onClick={() => handleAddItem()}
             >
               Add Source
             </Button>
