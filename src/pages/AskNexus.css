@@ -1,0 +1,389 @@
+.nexus-ask-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-height) - 48px);
+  max-width: 900px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.nexus-context-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+}
+
+.nexus-ask-conversation-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Empty State */
+.nexus-ask-empty-state {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+}
+
+.nexus-ask-empty-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.nexus-empty-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-xl);
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.nexus-ask-empty-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.nexus-ask-empty-subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  max-width: 500px;
+}
+
+.nexus-starter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 680px;
+}
+
+@media (max-width: 640px) {
+  .nexus-starter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nexus-starter-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nexus-starter-card:hover {
+  background: var(--bg-surface-elevated);
+  border-color: var(--accent-primary-border);
+  transform: translateY(-1px);
+}
+
+.nexus-starter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nexus-starter-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nexus-starter-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.nexus-phase-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  max-width: 680px;
+  text-align: left;
+}
+
+.nexus-phase-info-icon {
+  color: var(--accent-primary-hover);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.nexus-phase-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Messages List */
+.nexus-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.nexus-message-row {
+  display: flex;
+  gap: var(--space-3);
+  max-width: 85%;
+}
+
+.nexus-msg-user-row {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.nexus-msg-assistant-row {
+  align-self: flex-start;
+}
+
+.nexus-message-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.nexus-message-content-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.nexus-msg-user-row .nexus-message-content-box {
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-strong);
+}
+
+.nexus-message-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nexus-msg-author {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nexus-msg-mode-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--accent-primary-subtle);
+  border: 1px solid var(--accent-primary-border);
+  color: var(--accent-primary-hover);
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+}
+
+.nexus-msg-time {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+.nexus-msg-body {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nexus-msg-actions {
+  display: flex;
+  align-items: center;
+  margin-top: var(--space-1);
+}
+
+.nexus-msg-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+  transition: color var(--transition-fast);
+}
+
+.nexus-msg-copy-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Loading Dots */
+.nexus-loading-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+}
+
+.nexus-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  animation: bounceDot 1.4s infinite ease-in-out both;
+}
+
+.nexus-dot:nth-child(1) { animation-delay: -0.32s; }
+.nexus-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounceDot {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.nexus-loading-text {
+  margin-left: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* Composer Container */
+.nexus-ask-composer-container {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+/* Multimodal Tray */
+.nexus-multimodal-tray {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.nexus-modality-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.nexus-modality-btn:hover {
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.nexus-future-tag {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  color: var(--accent-secondary);
+}
+
+/* Composer Card */
+.nexus-composer-input-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color var(--transition-fast);
+}
+
+.nexus-composer-input-card:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.nexus-composer-textarea {
+  background: transparent;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  outline: none;
+  resize: none;
+  width: 100%;
+  max-height: 160px;
+  line-height: 1.5;
+}
+
+.nexus-composer-textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.nexus-composer-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.nexus-composer-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.nexus-composer-action-btns {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

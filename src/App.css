@@ -1,0 +1,12 @@
+/* NEXUS EDGE App Layout Rules */
+
+.nexus-page-enter {
+  opacity: 0;
+  transform: translateY(3px);
+}
+
+.nexus-page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}

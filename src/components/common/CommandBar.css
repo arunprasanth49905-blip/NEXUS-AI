@@ -1,0 +1,150 @@
+.nexus-command-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(5, 7, 10, 0.75);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: 1200;
+}
+
+.nexus-command-dialog {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.75);
+  width: 100%;
+  max-width: 580px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.nexus-command-search-bar {
+  display: flex;
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-default);
+  background-color: var(--bg-surface-elevated);
+}
+
+.nexus-command-search-icon {
+  color: var(--accent-primary-hover);
+  margin-right: var(--space-3);
+  flex-shrink: 0;
+}
+
+.nexus-command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  outline: none;
+  width: 100%;
+}
+
+.nexus-command-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.nexus-command-clear {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-xs);
+}
+
+.nexus-command-esc-kbd {
+  font-size: 11px;
+}
+
+.nexus-command-results {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.nexus-command-empty {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.nexus-command-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
+}
+
+.nexus-command-row:hover,
+.nexus-command-row-selected {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.nexus-command-row-selected {
+  border-left: 2px solid var(--accent-primary);
+}
+
+.nexus-command-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-primary-hover);
+  flex-shrink: 0;
+}
+
+.nexus-command-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.nexus-command-item-title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.nexus-command-item-category {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.nexus-command-item-shortcut {
+  font-size: 11px;
+}
+
+.nexus-command-item-arrow {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+.nexus-command-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-5);
+  background-color: var(--bg-surface-elevated);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.nexus-command-footer strong {
+  color: var(--text-secondary);
+}

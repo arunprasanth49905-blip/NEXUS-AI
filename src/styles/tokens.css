@@ -1,0 +1,122 @@
+/**
+ * NEXUS EDGE Design System Tokens
+ * Phase 1: Industrial-grade Edge AI Operating Interface
+ */
+
+:root {
+  /* Color Palette - Deep Charcoal & Near-Black Surfaces */
+  --bg-app: #080a0e;
+  --bg-primary: #0b0e14;
+  --bg-secondary: #0f131a;
+  --bg-surface: #141822;
+  --bg-surface-elevated: #1a202e;
+  --bg-surface-hover: #22293a;
+  --bg-surface-active: #293246;
+  --bg-surface-subtle: rgba(255, 255, 255, 0.02);
+
+  /* Borders & Dividers */
+  --border-subtle: #1b2230;
+  --border-default: #242c3f;
+  --border-strong: #333e56;
+  --border-focus: #3b82f6;
+
+  /* Primary Brand - Electric Blue */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #60a5fa;
+  --accent-primary-active: #2563eb;
+  --accent-primary-subtle: rgba(59, 130, 246, 0.12);
+  --accent-primary-border: rgba(59, 130, 246, 0.28);
+
+  /* Secondary Brand - Subtle Cyan */
+  --accent-secondary: #06b6d4;
+  --accent-secondary-hover: #22d3ee;
+  --accent-secondary-subtle: rgba(6, 182, 212, 0.12);
+  --accent-secondary-border: rgba(6, 182, 212, 0.28);
+
+  /* Semantic Feedback */
+  --status-success: #10b981;
+  --status-success-bg: rgba(16, 185, 129, 0.12);
+  --status-success-border: rgba(16, 185, 129, 0.25);
+
+  --status-warning: #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-warning-border: rgba(245, 158, 11, 0.25);
+
+  --status-error: #ef4444;
+  --status-error-bg: rgba(239, 68, 68, 0.12);
+  --status-error-border: rgba(239, 68, 68, 0.25);
+
+  --status-neutral: #94a3b8;
+  --status-neutral-bg: rgba(148, 163, 184, 0.12);
+  --status-neutral-border: rgba(148, 163, 184, 0.22);
+
+  /* Typography Colors */
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-disabled: #475569;
+  --text-inverse: #0b0e14;
+  --text-accent: #60a5fa;
+
+  /* Typography Fonts */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Type Scale */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 1.875rem;  /* 30px */
+  --text-4xl: 2.25rem;   /* 36px */
+
+  /* 8px Spacing System */
+  --space-05: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Moderate Radii */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows - Subtle Depth */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 25px -4px rgba(0, 0, 0, 0.55);
+  --shadow-focus: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent-primary);
+
+  /* Layout Dimensions */
+  --sidebar-width: 256px;
+  --sidebar-width-collapsed: 68px;
+  --topbar-height: 56px;
+  --content-max-width: 1280px;
+
+  /* Transitions */
+  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reduced Motion Preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

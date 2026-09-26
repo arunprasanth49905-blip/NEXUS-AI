@@ -1,0 +1,72 @@
+.nexus-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+/* Padding variants */
+.nexus-card-p-none { padding: 0; }
+.nexus-card-p-sm { padding: var(--space-3); }
+.nexus-card-p-md { padding: var(--space-5); }
+.nexus-card-p-lg { padding: var(--space-8); }
+
+/* Surface variants */
+.nexus-card-default {
+  background-color: var(--bg-surface);
+  border-color: var(--border-default);
+}
+
+.nexus-card-elevated {
+  background-color: var(--bg-surface-elevated);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.nexus-card-subtle {
+  background-color: var(--bg-surface-subtle);
+  border-color: var(--border-subtle);
+}
+
+.nexus-card-interactive {
+  cursor: pointer;
+}
+
+.nexus-card-interactive:hover {
+  background-color: var(--bg-surface-elevated);
+  border-color: var(--accent-primary-border);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.nexus-card-interactive:active {
+  transform: translateY(0);
+}
+
+/* Card sections */
+.nexus-card-header {
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nexus-card-body {
+  flex: 1;
+}
+
+.nexus-card-footer {
+  padding-top: var(--space-3);
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

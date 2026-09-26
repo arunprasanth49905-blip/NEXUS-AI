@@ -1,0 +1,58 @@
+.nexus-app-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-primary);
+  overflow: hidden;
+  position: relative;
+}
+
+.nexus-sidebar-wrapper {
+  height: 100vh;
+  z-index: 60;
+}
+
+.nexus-main-content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+}
+
+.nexus-page-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-6) var(--space-8);
+  position: relative;
+}
+
+.nexus-mobile-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(5, 7, 10, 0.7);
+  backdrop-filter: blur(3px);
+  z-index: 55;
+}
+
+@media (max-width: 900px) {
+  .nexus-sidebar-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+  }
+
+  .nexus-sidebar-wrapper.nexus-mobile-open {
+    transform: translateX(0);
+  }
+
+  .nexus-page-container {
+    padding: var(--space-4);
+  }
+}

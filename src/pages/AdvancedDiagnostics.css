@@ -1,0 +1,177 @@
+.nexus-diag-page {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-bottom: var(--space-10);
+}
+
+.nexus-diag-disclosure {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background-color: var(--accent-secondary-subtle);
+  border: 1px solid var(--accent-secondary-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.nexus-diag-disclosure-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nexus-diag-disclosure-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent-secondary-hover);
+}
+
+.nexus-diag-disclosure-text p {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.nexus-diag-error-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--status-warning-bg);
+  border: 1px solid var(--status-warning-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--status-warning);
+}
+
+.nexus-diag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: var(--space-4);
+}
+
+.nexus-diag-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.nexus-diag-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.nexus-diag-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nexus-diag-card-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+}
+
+.nexus-mono-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+}
+
+.nexus-diag-props-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.nexus-diag-prop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.nexus-diag-prop-key {
+  color: var(--text-tertiary);
+}
+
+.nexus-diag-prop-val {
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.nexus-mono-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.nexus-val-unconfigured {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--bg-surface-elevated);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+}
+
+.nexus-val-unknown {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--status-warning);
+}
+
+/* Raw JSON Card */
+.nexus-raw-diag-card {
+  margin-top: var(--space-2);
+}
+
+.nexus-raw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.nexus-raw-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nexus-raw-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nexus-raw-code {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #38bdf8;
+  max-height: 280px;
+  overflow-y: auto;
+  line-height: 1.5;
+}

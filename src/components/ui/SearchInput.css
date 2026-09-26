@@ -1,0 +1,64 @@
+.nexus-search-bar {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  height: 36px;
+  width: 100%;
+  transition: all var(--transition-fast);
+}
+
+.nexus-search-bar:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+  background-color: var(--bg-surface);
+}
+
+.nexus-search-icon {
+  color: var(--text-tertiary);
+  margin-right: var(--space-2);
+  flex-shrink: 0;
+}
+
+.nexus-search-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  outline: none;
+  width: 100%;
+}
+
+.nexus-search-field::placeholder {
+  color: var(--text-tertiary);
+}
+
+.nexus-search-clear {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  transition: color var(--transition-fast);
+}
+
+.nexus-search-clear:hover {
+  color: var(--text-primary);
+}
+
+.nexus-search-shortcut {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: 1px 4px;
+}

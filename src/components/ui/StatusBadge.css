@@ -1,0 +1,88 @@
+.nexus-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.nexus-status-sm {
+  padding: 2px 8px;
+  font-size: var(--text-xs);
+}
+
+.nexus-status-md {
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+}
+
+.nexus-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nexus-status-icon {
+  flex-shrink: 0;
+}
+
+/* Status variants */
+.nexus-status-ready {
+  background-color: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: #34d399;
+}
+.nexus-status-ready .nexus-status-dot {
+  background-color: var(--status-success);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.nexus-status-processing {
+  background-color: var(--accent-primary-subtle);
+  border-color: var(--accent-primary-border);
+  color: var(--accent-primary-hover);
+}
+.nexus-status-processing .nexus-status-dot {
+  background-color: var(--accent-primary);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+}
+
+.nexus-status-limited {
+  background-color: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+  color: #fbbf24;
+}
+.nexus-status-limited .nexus-status-dot {
+  background-color: var(--status-warning);
+}
+
+.nexus-status-offline {
+  background-color: var(--status-neutral-bg);
+  border-color: var(--status-neutral-border);
+  color: var(--text-secondary);
+}
+.nexus-status-offline .nexus-status-dot {
+  background-color: var(--text-tertiary);
+}
+
+.nexus-status-error {
+  background-color: var(--status-error-bg);
+  border-color: var(--status-error-border);
+  color: #f87171;
+}
+.nexus-status-error .nexus-status-dot {
+  background-color: var(--status-error);
+}
+
+.nexus-spin-slow {
+  animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

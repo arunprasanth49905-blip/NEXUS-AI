@@ -1,0 +1,219 @@
+.nexus-sidebar {
+  width: var(--sidebar-width);
+  height: 100vh;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  transition: width var(--transition-normal);
+  z-index: 50;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.nexus-sidebar-collapsed {
+  width: var(--sidebar-width-collapsed);
+}
+
+.nexus-sidebar-header {
+  height: var(--topbar-height);
+  padding: 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.nexus-brand-btn {
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.nexus-brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nexus-brand-meta {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nexus-brand-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.nexus-brand-tag {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--accent-secondary);
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.nexus-collapse-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-tertiary);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.nexus-collapse-btn:hover {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.nexus-nav-list {
+  flex: 1;
+  padding: var(--space-4) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.nexus-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 9px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  width: 100%;
+}
+
+.nexus-nav-item:hover {
+  background-color: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+.nexus-nav-item-active {
+  background-color: var(--accent-primary-subtle) !important;
+  border-color: var(--accent-primary-border) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.nexus-nav-item-active .nexus-nav-icon {
+  color: var(--accent-primary-hover);
+}
+
+.nexus-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--transition-fast);
+}
+
+.nexus-nav-label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.nexus-nav-shortcut {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  padding: 1px 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+
+.nexus-sidebar-footer {
+  padding: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  background-color: var(--bg-primary);
+}
+
+.nexus-sidebar-status-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.nexus-sidebar-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nexus-status-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.nexus-sidebar-privacy-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.nexus-sidebar-privacy-note .text-cyan {
+  color: var(--accent-secondary);
+}
+
+.nexus-sidebar-collapsed-status {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+@media (max-width: 900px) {
+  .nexus-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .nexus-sidebar.nexus-sidebar-mobile-open {
+    transform: translateX(0);
+  }
+}
