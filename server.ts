@@ -11,6 +11,7 @@ import { registerDefaultTools } from './server/tools/implementations/index.js';
 import { ToolExecutionEngine } from './server/tools/executor.js';
 import { FilesystemSandbox } from './server/tools/sandbox.js';
 import { ActionAuditLogger } from './server/tools/audit.js';
+import { AdaptiveEngine } from './server/adaptation/index.js';
 import type { ProviderId } from './src/types/runtime.js';
 import type { ScreenCaptureRequest, CameraCaptureRequest, VoiceTranscriptionRequest } from './src/types/perception.js';
 import type { MemoryType } from './src/types/context_memory.js';
@@ -39,8 +40,8 @@ app.use((_req, res, next) => {
 });
 
 const PROJECT_NAME = 'NEXUS EDGE';
-const VERSION = '0.6.0';
-const PHASE = 'Phase 6 - Tool & Action Engine + Controlled AI Execution';
+const VERSION = '0.7.0';
+const PHASE = 'Phase 7 - Adaptive Intelligence, User Preferences & Continuous Improvement';
 const TAGLINE = "Understand what you're doing. Get intelligent help. Keep your data private.";
 
 // Initialize Filesystem Sandbox to workspace root
@@ -66,6 +67,9 @@ const toolRegistry = ToolRegistry.getInstance();
 registerDefaultTools(toolRegistry);
 const toolExecutionEngine = ToolExecutionEngine.getInstance({ registry: toolRegistry });
 const actionAuditLogger = ActionAuditLogger.getInstance();
+
+// Instantiate Adaptive Intelligence & Continuous Learning Engine (Phase 7)
+const adaptiveEngine = AdaptiveEngine.getInstance();
 
 // 1. Health check
 app.get('/api/v1/health', (_req, res) => {
@@ -836,6 +840,295 @@ app.delete('/api/v1/memory/:id', async (req, res) => {
   res.json({ success: true, memory_id: memoryId });
 });
 
+// ====================================================
+// PHASE 7: ADAPTIVE INTELLIGENCE & USER PREFERENCES
+// ====================================================
+
+// 1. List user preferences
+app.get('/api/v1/preferences', (req, res) => {
+  const scope = req.query.scope as any;
+  const category = req.query.category as any;
+  const project_id = req.query.project_id as string;
+  const enabled_only = req.query.enabled_only === 'true';
+
+  const preferences = adaptiveEngine.preferenceRepo.listPreferences({
+    scope,
+    category,
+    project_id,
+    enabled_only,
+  });
+
+  res.json({
+    preferences,
+    total: preferences.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 2. Create preference (explicit or setting)
+app.post('/api/v1/preferences', (req, res) => {
+  const { category, key, value, scope, project_id, task_id, source_instruction } = req.body || {};
+
+  if (!category || !key || !value) {
+    res.status(400).json({ error: 'Missing required fields: category, key, value' });
+    return;
+  }
+
+  // Precedence / Security Guard (Scenario 6)
+  const safetyCheck = adaptiveEngine.policyEngine.isPreferenceSafe(key, value);
+  if (!safetyCheck.safe) {
+    res.status(400).json({
+      error: safetyCheck.reason || 'Preference rejected by Security Policy',
+      security_violation: true,
+    });
+    return;
+  }
+
+  const pref = adaptiveEngine.preferenceManager.createExplicitPreference({
+    category,
+    key,
+    value,
+    scope: scope || 'USER',
+    project_id,
+    task_id,
+    source_instruction,
+  });
+
+  adaptiveEngine.recordHistory({
+    title: `Saved preference: ${pref.key}`,
+    detail: `Set ${pref.key} to "${pref.value}" (Scope: ${pref.scope})`,
+    category: 'preference',
+  });
+
+  res.status(201).json({ success: true, preference: pref });
+});
+
+// 3. Get single preference
+app.get('/api/v1/preferences/:id', (req, res) => {
+  const pref = adaptiveEngine.preferenceRepo.getPreference(req.params.id);
+  if (!pref) {
+    res.status(404).json({ error: `Preference '${req.params.id}' not found.` });
+    return;
+  }
+  res.json({ preference: pref });
+});
+
+// 4. Update preference
+app.patch('/api/v1/preferences/:id', (req, res) => {
+  const { value, enabled, scope, category } = req.body || {};
+  if (value !== undefined) {
+    const safetyCheck = adaptiveEngine.policyEngine.isPreferenceSafe('update', value);
+    if (!safetyCheck.safe) {
+      res.status(400).json({ error: safetyCheck.reason, security_violation: true });
+      return;
+    }
+  }
+
+  const updated = adaptiveEngine.preferenceRepo.updatePreference(req.params.id, {
+    value,
+    enabled,
+    scope,
+    category,
+  });
+
+  if (!updated) {
+    res.status(404).json({ error: `Preference '${req.params.id}' not found.` });
+    return;
+  }
+
+  adaptiveEngine.recordHistory({
+    title: `Updated preference: ${updated.key}`,
+    detail: `Updated status: ${updated.enabled ? 'Enabled' : 'Disabled'}`,
+    category: 'preference',
+  });
+
+  res.json({ success: true, preference: updated });
+});
+
+// 5. Delete preference (Scenario 5)
+app.delete('/api/v1/preferences/:id', (req, res) => {
+  const deleted = adaptiveEngine.preferenceRepo.deletePreference(req.params.id);
+  if (!deleted) {
+    res.status(404).json({ error: `Preference '${req.params.id}' not found.` });
+    return;
+  }
+
+  adaptiveEngine.recordHistory({
+    title: 'Deleted preference',
+    detail: `Removed preference id: ${req.params.id}`,
+    category: 'preference',
+  });
+
+  res.json({ success: true, preference_id: req.params.id });
+});
+
+// 6. List feedback
+app.get('/api/v1/feedback', (req, res) => {
+  const rating = req.query.rating as any;
+  const category = req.query.category as any;
+  const task_id = req.query.task_id as string;
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+
+  const items = adaptiveEngine.feedbackRepo.listFeedback({ rating, category, task_id, limit });
+  res.json({ feedback: items, total: items.length });
+});
+
+// 7. Record user feedback (Section 9)
+app.post('/api/v1/feedback', (req, res) => {
+  const { rating, category, comment, task_id, execution_id, response_id, source } = req.body || {};
+
+  if (!rating || (rating !== 'HELPFUL' && rating !== 'NOT_HELPFUL')) {
+    res.status(400).json({ error: 'Valid rating (HELPFUL | NOT_HELPFUL) is required.' });
+    return;
+  }
+
+  const fb = adaptiveEngine.feedbackManager.recordFeedback({
+    rating,
+    category,
+    comment,
+    task_id,
+    execution_id,
+    response_id,
+    source,
+  });
+
+  // Emit learning signal
+  const signal = adaptiveEngine.signalManager.emitSignal({
+    type: 'USER_FEEDBACK',
+    source: source || 'user_interface',
+    task_id,
+    execution_id,
+    context: {
+      rating,
+      category,
+      comment: fb.comment,
+    },
+  });
+
+  adaptiveEngine.processLearningSignal(signal);
+
+  res.status(201).json({ success: true, feedback: fb, signal_id: signal.signal_id });
+});
+
+// 8. List learning signals
+app.get('/api/v1/learning/signals', (req, res) => {
+  const type = req.query.type as any;
+  const task_id = req.query.task_id as string;
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+
+  const signals = adaptiveEngine.signalRepo.listSignals({ type, task_id, limit });
+  res.json({ signals, total: signals.length });
+});
+
+// 9. Post learning signal
+app.post('/api/v1/learning/signals', (req, res) => {
+  const { type, source, task_id, execution_id, context, scope } = req.body || {};
+
+  if (!type || !source) {
+    res.status(400).json({ error: 'type and source are required.' });
+    return;
+  }
+
+  const signal = adaptiveEngine.signalManager.emitSignal({
+    type,
+    source,
+    task_id,
+    execution_id,
+    context,
+    scope,
+  });
+
+  const evaluation = adaptiveEngine.processLearningSignal(signal);
+  res.status(201).json({ success: true, signal, evaluation });
+});
+
+// 10. Adaptive engine status report (Section 29)
+app.get('/api/v1/learning/status', (_req, res) => {
+  res.json(adaptiveEngine.getStatusReport());
+});
+
+// 11. User-friendly adaptation history (Section 28)
+app.get('/api/v1/learning/history', (_req, res) => {
+  res.json({ history: adaptiveEngine.getHistory() });
+});
+
+// 12. Learning controls / settings
+app.get('/api/v1/learning/settings', (_req, res) => {
+  res.json(adaptiveEngine.policyEngine.getSettings());
+});
+
+app.patch('/api/v1/learning/settings', (req, res) => {
+  const updated = adaptiveEngine.policyEngine.updateSettings(req.body || {});
+  res.json({ success: true, settings: updated });
+});
+
+// 13. Task outcomes
+app.get('/api/v1/outcomes', (req, res) => {
+  const task_id = req.query.task_id as string;
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+  const outcomes = adaptiveEngine.outcomeRepo.listOutcomes({ task_id, limit });
+  res.json({ outcomes, total: outcomes.length });
+});
+
+app.get('/api/v1/outcomes/:id', (req, res) => {
+  const outcome = adaptiveEngine.outcomeRepo.getOutcome(req.params.id);
+  if (!outcome) {
+    res.status(404).json({ error: `Outcome '${req.params.id}' not found.` });
+    return;
+  }
+  res.json({ outcome });
+});
+
+// 14. Personalization recommendations
+app.post('/api/v1/personalization/recommend', (req, res) => {
+  const { query, project_id, task_id } = req.body || {};
+  const rec = adaptiveEngine.personalizationEngine.getRecommendations({
+    query: query || '',
+    project_id,
+    task_id,
+  });
+  res.json(rec);
+});
+
+// 15. Suggested preference candidates (Section 8 & 38)
+app.get('/api/v1/preferences/candidates', (_req, res) => {
+  const candidates = adaptiveEngine.preferenceRepo.listPendingCandidates();
+  res.json({ candidates, total: candidates.length });
+});
+
+app.post('/api/v1/preferences/suggest', (req, res) => {
+  const { category, key, value, rationale, scope } = req.body || {};
+  if (!category || !key || !value || !rationale) {
+    res.status(400).json({ error: 'category, key, value, and rationale are required.' });
+    return;
+  }
+
+  const candidate = adaptiveEngine.preferenceManager.suggestCandidate({
+    category,
+    key,
+    value,
+    rationale,
+    scope,
+  });
+
+  res.status(201).json({ success: true, candidate });
+});
+
+app.post('/api/v1/preferences/candidates/:id/resolve', (req, res) => {
+  const { accept } = req.body || {};
+  const pref = adaptiveEngine.preferenceRepo.resolveCandidate(req.params.id, Boolean(accept));
+
+  if (accept && pref) {
+    adaptiveEngine.recordHistory({
+      title: `Approved suggested preference: ${pref.key}`,
+      detail: `Value: "${pref.value}" (Scope: ${pref.scope})`,
+      category: 'preference',
+    });
+  }
+
+  res.json({ success: true, accepted: Boolean(accept), preference: pref });
+});
+
 // ----------------------------------------------------
 // INTEGRATED MULTIMODAL + CONTEXT + RUNTIME INFERENCE
 // ----------------------------------------------------
@@ -859,6 +1152,16 @@ app.post('/api/v1/assistant/query', async (req, res) => {
       multimodalSummary = `Combined ${mergedContext.active_modalities.length} modalities: [${mergedContext.active_modalities.join(', ')}]`;
     }
 
+    // 1.5 Phase 7 Explicit Preference Detection
+    const detectedPref = adaptiveEngine.preferenceManager.extractPreferenceFromInstruction(primaryInputText);
+    if (detectedPref) {
+      adaptiveEngine.recordHistory({
+        title: `Saved preference: ${detectedPref.key}`,
+        detail: `Set to "${detectedPref.value}" (Scope: ${detectedPref.scope})`,
+        category: 'preference',
+      });
+    }
+
     // 2. Process via Phase 4 Context Aggregator & Memory Retrieval
     const canonicalContext = await contextMemoryEngine.aggregateContext({
       user_input: primaryInputText,
@@ -868,9 +1171,21 @@ app.post('/api/v1/assistant/query', async (req, res) => {
     // 3. Construct bounded Context Window
     const contextWindow = contextMemoryEngine.constructContextWindow(canonicalContext);
 
+    // 3.5 Personalization & User Preferences (Phase 7)
+    const personalization = adaptiveEngine.personalizationEngine.getRecommendations({
+      query: primaryInputText,
+    });
+    let formattedPrompt = contextWindow.formatted_prompt;
+    if (personalization.applied_preferences.length > 0) {
+      const prefSnippets = personalization.applied_preferences.map(
+        (p) => `- [${p.scope}] ${p.category} -> ${p.key}: ${p.value}`
+      );
+      formattedPrompt += `\n\n[USER PREFERENCES & ADAPTATION]\n${prefSnippets.join('\n')}`;
+    }
+
     // 4. Pass Context Window to Phase 2 Hardware-Aware AI Runtime
     const inferenceResult = await runtimeManager.infer({
-      input: contextWindow.formatted_prompt,
+      input: formattedPrompt,
       requestedProvider: 'auto',
     });
 
@@ -884,6 +1199,11 @@ app.post('/api/v1/assistant/query', async (req, res) => {
       fallback_used: inferenceResult.fallback_used,
       fallback_reason: inferenceResult.fallback_reason,
       multimodal_context: multimodalSummary,
+      personalization: {
+        applied: personalization.applied_preferences.length > 0,
+        explanation: personalization.explanation,
+        preferences_count: personalization.applied_preferences.length,
+      },
       context_understanding: {
         category: canonicalContext.category,
         intent: canonicalContext.intent,
@@ -920,6 +1240,7 @@ app.get('/api/info', async (_req, res) => {
     context_memory: await contextMemoryEngine.getStatus(),
     orchestrator: agentOrchestrator.getStatusReport(),
     tools: toolExecutionEngine.getStatusReport(),
+    adaptation: adaptiveEngine.getStatusReport(),
   });
 });
 

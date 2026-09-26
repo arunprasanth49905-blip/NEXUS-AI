@@ -161,20 +161,54 @@ Phase 6 transitions NEXUS EDGE from "an AI that plans" to "an AI that can safely
                   VERIFICATION
                         |
                    AUDIT LOGGER
-                        |
-                  FINAL RESPONSE
+                                   |
+                   FINAL RESPONSE
 ```
 
 ---
 
-## API Endpoints (Phases 1 through 6)
+## Architecture Milestone: Phase 7 — Adaptive Intelligence, User Preferences & Continuous Learning
+
+Phase 7 introduces the final **LEARN + ADAPT** layer to NEXUS EDGE, allowing behavioral adaptation without uncontrolled model retraining:
+1. **Explicit Preference Manager**: Captures and enforces scoped user rules (e.g., *"Always explain technical topics in simple language"*, *"For this report, use APA format"*). Supports `USER`, `PROJECT`, `TASK`, and `SESSION` scopes.
+2. **Inferred Preference Candidates**: Detects repetitive user behavior patterns and surfaces them as candidate suggestions requiring human confirmation before persistence. Never silently turns behavior into permanent rules.
+3. **Structured Feedback System**: Collects explicit positive/negative feedback (`HELPFUL`, `NOT_HELPFUL`) and fine-grained categories (`TOO_LONG`, `TOO_SHORT`, `MISSING_INFORMATION`, `WRONG_FORMAT`, `INCORRECT`) to guide strategy adaptation.
+4. **Learning Signal & Policy Engine**: Evaluates learning events through privacy filtering and precedence gates. Security controls strictly supersede user preferences (`Security Policy > Tool Policy > User Preferences > Task Context`). Prevents prompt injection and rejects malicious attempts to bypass approvals.
+5. **Outcome Analyzer & Strategy Learning**: Records empirical task outcomes (`VERIFIED_SUCCESS`, `VERIFIED_FAILURE`, `TOOL_FAILURE`) and maintains empirical success/failure statistics for task strategies.
+6. **Personalization Engine**: Transparently retrieves relevant preferences and generates truthful provenance explanations without exposing internal chain-of-thought.
+7. **Privacy Guard & Secret Redaction**: Intercepts all tokens, passwords, and private keys, ensuring credentials are never stored in preferences or feedback.
+8. **No Model Weight Retraining**: Strictly behavioral adaptation via context injection, memory recall, scoped preferences, and strategy selection. Zero automatic fine-tuning or weight modification.
+
+```
+USER REQUEST
+     ↓
+PHASE 3: PERCEIVE (Multimodal Inputs)
+     ↓
+PHASE 4: UNDERSTAND + REMEMBER (Canonical Context + Layered Memory)
+     ↓
+PHASE 7: PERSONALIZATION ENGINE (Scoped Preferences & Verified Strategies)
+     ↓
+PHASE 5: REASON + PLAN (Agent Orchestration & DAG Planner)
+     ↓
+PHASE 6: ACT (Sandboxed Tools & Controlled Execution)
+     ↓
+PHASE 6: VERIFY (Action & Schema Verification)
+     ↓
+PHASE 7: LEARN + ADAPT (Feedback + Outcome Analyzer + Policy Engine)
+     ↓
+FUTURE TASK (Personalized & More Effective Interactions)
+```
+
+---
+
+## API Endpoints (Phases 1 through 7)
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/health` | System health, service status, and active provider |
 | `GET` | `/api/v1/system` | Authentic host hardware specs and acceleration state |
 | `GET` | `/api/v1/context` | Active context, session ID, and active task goal |
-| `POST` | `/api/v1/assistant/query` | Unified inference query with context window & memory retrieval |
+| `POST` | `/api/v1/assistant/query` | Unified inference query with personalization, context window & memory retrieval |
 | `GET` | `/api/v1/runtime/status` | Comprehensive runtime state, selection, and explanation |
 | `POST` | `/api/v1/runtime/benchmark` | Iterative benchmark on selected provider |
 | `GET` | `/api/v1/perception/status` | Availability status for text, screen, camera, voice, doc, OCR, vision |
@@ -202,6 +236,26 @@ Phase 6 transitions NEXUS EDGE from "an AI that plans" to "an AI that can safely
 | `POST` | `/api/v1/memory` | Explicitly retain new memory (audited by Privacy Guard) |
 | `POST` | `/api/v1/memory/search` | Retrieve memories using deterministic ranking |
 | `DELETE` | `/api/v1/memory/:id` | Permanently delete individual memory |
+| `GET` | `/api/v1/preferences` | List user preferences with scope and category filters |
+| `POST` | `/api/v1/preferences` | Create explicit user preference (validated by Security Policy) |
+| `GET` | `/api/v1/preferences/:id` | Get individual preference details |
+| `PATCH` | `/api/v1/preferences/:id` | Update preference value, status, or scope |
+| `DELETE` | `/api/v1/preferences/:id` | Permanently delete preference |
+| `GET` | `/api/v1/preferences/candidates` | List pending inferred preference candidates |
+| `POST` | `/api/v1/preferences/suggest` | Create new suggested preference candidate |
+| `POST` | `/api/v1/preferences/candidates/:id/resolve` | Approve or dismiss preference candidate |
+| `GET` | `/api/v1/feedback` | List user feedback records |
+| `POST` | `/api/v1/feedback` | Record structured user feedback (sanitized by Secret Redactor) |
+| `GET` | `/api/v1/learning/signals` | List emitted learning signals |
+| `POST` | `/api/v1/learning/signals` | Emit learning signal evaluated by Policy Engine |
+| `GET` | `/api/v1/learning/status` | Phase 7 Adaptive Engine status and truthful metrics |
+| `GET` | `/api/v1/learning/history` | Chronological adaptation history log |
+| `GET` | `/api/v1/learning/settings` | Get user learning and personalization toggles |
+| `PATCH` | `/api/v1/learning/settings` | Update user learning policy settings |
+| `GET` | `/api/v1/outcomes` | List task outcomes and verification records |
+| `GET` | `/api/v1/outcomes/:id` | Get specific task outcome and strategy details |
+| `POST` | `/api/v1/personalization/recommend` | Retrieve scoped preferences and strategy for task |
+| `POST` | `/api/v1/personalization/apply` | Enrich context prompt with relevant preferences |
 
 ---
 

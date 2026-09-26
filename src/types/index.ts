@@ -8,6 +8,7 @@ export * from './perception';
 export * from './context_memory';
 export * from './agent';
 export * from './tool';
+export * from './adaptation';
 
 export type NavPage = 
   | 'home' 
@@ -102,6 +103,12 @@ export interface ChatMessage {
     retrieved_memories_count?: number;
     estimated_tokens?: number;
   };
+  personalization?: {
+    applied: boolean;
+    explanation?: string;
+    preferences_count?: number;
+  };
+  feedbackGiven?: 'HELPFUL' | 'NOT_HELPFUL';
   isStreaming?: boolean;
 }
 
@@ -120,7 +127,7 @@ export interface ActivityEntry {
   timestamp: string;
   relativeTime: string;
   title: string;
-  category: 'query' | 'context' | 'system' | 'session' | 'inference' | 'agent' | 'orchestration' | 'action';
+  category: 'query' | 'context' | 'system' | 'session' | 'inference' | 'agent' | 'orchestration' | 'action' | 'adaptation';
   details?: string;
   isDemo?: boolean;
 }

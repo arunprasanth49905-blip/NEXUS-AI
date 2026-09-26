@@ -112,6 +112,11 @@ class ApiService {
       retrieved_memories_count?: number;
       estimated_tokens?: number;
     };
+    personalization?: {
+      applied: boolean;
+      explanation?: string;
+      preferences_count?: number;
+    };
     timestamp: string;
   }> {
     return this.request('/assistant/query', {

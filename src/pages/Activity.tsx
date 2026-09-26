@@ -10,7 +10,8 @@ import {
   Info,
   CheckCircle2,
   Bot,
-  Wrench
+  Wrench,
+  Brain
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -19,6 +20,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import type { ActivityEntry } from '../types';
 import { agentService } from '../services/agent';
 import { toolService } from '../services/tool';
+import { getLearningHistory } from '../services/adaptation.js';
 import './Activity.css';
 
 export interface ActivityProps {
@@ -125,7 +127,8 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
     Promise.all([
       agentService.getExecutions().catch(() => ({ executions: [] })),
       toolService.getActions().catch(() => ({ actions: [] })),
-    ]).then(([agentRes, toolRes]) => {
+      getLearningHistory().catch(() => []),
+    ]).then(([agentRes, toolRes, adaptRes]) => {
       const liveEntries: ActivityEntry[] = [];
 
       if (agentRes.executions && agentRes.executions.length > 0) {
@@ -156,6 +159,20 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
         }
       }
 
+      if (adaptRes && adaptRes.length > 0) {
+        for (const h of adaptRes) {
+          liveEntries.push({
+            id: `adapt-${h.id}`,
+            timestamp: new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            relativeTime: 'Recent',
+            title: h.title,
+            category: 'adaptation',
+            details: h.detail,
+            isDemo: false,
+          });
+        }
+      }
+
       if (liveEntries.length > 0) {
         setActivities((prev) => [...liveEntries, ...prev.filter((p) => p.isDemo)]);
       }
@@ -169,6 +186,8 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
+      case 'adaptation':
+        return <Brain size={15} className="text-cyan" />;
       case 'action':
         return <Wrench size={15} className="text-orange" />;
       case 'agent':
@@ -253,6 +272,7 @@ export const Activity: React.FC<ActivityProps> = ({ onAddToast }) => {
       <div className="nexus-activity-filter-bar">
         {[
           { id: 'all', label: 'All Activity' },
+          { id: 'adaptation', label: 'Adaptation & Rules' },
           { id: 'action', label: 'Tools & Actions' },
           { id: 'agent', label: 'Agents & Plans' },
           { id: 'query', label: 'Queries' },

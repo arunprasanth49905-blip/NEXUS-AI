@@ -83,4 +83,13 @@ export class SecretRedactor {
 
     return data;
   }
+
+  public static hasSecrets(text: string): boolean {
+    if (!text || typeof text !== 'string') return false;
+    for (const pattern of this.SECRET_PATTERNS) {
+      pattern.lastIndex = 0;
+      if (pattern.test(text)) return true;
+    }
+    return false;
+  }
 }

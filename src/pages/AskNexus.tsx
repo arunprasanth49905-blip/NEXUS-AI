@@ -13,7 +13,9 @@ import {
   Mic,
   ShieldCheck,
   Info,
-  Square
+  Square,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -26,6 +28,7 @@ import type { OrchestrationTask, TaskPlan, OrchestrationResult } from '../types/
 import { api } from '../services/api';
 import { agentService } from '../services/agent';
 import { PerceptionService } from '../services/perception';
+import { submitFeedback } from '../services/adaptation.js';
 import './AskNexus.css';
 
 export interface AskNexusProps {
@@ -72,6 +75,30 @@ export const AskNexus: React.FC<AskNexusProps> = ({
   const [currentPlan, setCurrentPlan] = useState<TaskPlan | null>(null);
   const [currentResult, setCurrentResult] = useState<OrchestrationResult | null>(null);
   const [isExecutingPlan, setIsExecutingPlan] = useState(false);
+
+  // Phase 7 Feedback State
+  const [feedbackPromptId, setFeedbackPromptId] = useState<string | null>(null);
+
+  const handleFeedback = async (
+    msgId: string,
+    rating: 'HELPFUL' | 'NOT_HELPFUL',
+    category?: string
+  ) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, feedbackGiven: rating } : m))
+    );
+    setFeedbackPromptId(null);
+    await submitFeedback({
+      rating,
+      category,
+      response_id: msgId,
+    });
+    onAddToast(
+      'Feedback Recorded',
+      rating === 'HELPFUL' ? 'Thank you! Verification signal recorded.' : 'Noted. NEXUS will adapt future responses.',
+      'info'
+    );
+  };
 
   const starterExamples = [
     {
@@ -179,6 +206,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
         fallbackReason: result.fallback_reason,
         multimodalContext: result.multimodal_context,
         contextUnderstanding: result.context_understanding,
+        personalization: result.personalization,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -535,8 +563,28 @@ export const AskNexus: React.FC<AskNexusProps> = ({
                       ))}
                     </div>
 
+                    {msg.personalization?.applied && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '11px',
+                          color: 'var(--accent-cyan)',
+                          background: 'rgba(6,182,212,0.1)',
+                          border: '1px solid rgba(6,182,212,0.2)',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          marginTop: '6px',
+                        }}
+                      >
+                        <Sparkles size={11} />
+                        <span>{msg.personalization.explanation || 'Applied saved user preference'}</span>
+                      </div>
+                    )}
+
                     {!isUser && (
-                      <div className="nexus-msg-actions">
+                      <div className="nexus-msg-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
                         <button
                           type="button"
                           className="nexus-msg-copy-btn"
@@ -556,6 +604,65 @@ export const AskNexus: React.FC<AskNexusProps> = ({
                             </>
                           )}
                         </button>
+
+                        {/* Phase 7 Selective Feedback Controls (Section 10 & 37) */}
+                        {msg.feedbackGiven ? (
+                          <span style={{ fontSize: '11px', color: 'var(--accent-green)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Check size={11} /> {msg.feedbackGiven === 'HELPFUL' ? 'Helpful' : 'Feedback recorded'}
+                          </span>
+                        ) : (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <button
+                              type="button"
+                              className="nexus-msg-copy-btn"
+                              title="Helpful output"
+                              onClick={() => handleFeedback(msg.id, 'HELPFUL')}
+                            >
+                              <ThumbsUp size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              className="nexus-msg-copy-btn"
+                              title="Needs improvement"
+                              onClick={() => setFeedbackPromptId(feedbackPromptId === msg.id ? null : msg.id)}
+                            >
+                              <ThumbsDown size={11} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Negative feedback category chips */}
+                    {!isUser && feedbackPromptId === msg.id && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', alignSelf: 'center' }}>
+                          What could be improved?
+                        </span>
+                        {[
+                          { label: 'Too long', cat: 'TOO_LONG' },
+                          { label: 'Too short', cat: 'TOO_SHORT' },
+                          { label: 'Wrong format', cat: 'WRONG_FORMAT' },
+                          { label: 'Missing info', cat: 'MISSING_INFORMATION' },
+                          { label: 'Incorrect', cat: 'INCORRECT' },
+                        ].map((c) => (
+                          <button
+                            key={c.cat}
+                            type="button"
+                            onClick={() => handleFeedback(msg.id, 'NOT_HELPFUL', c.cat)}
+                            style={{
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              background: 'var(--bg-surface-elevated)',
+                              border: '1px solid var(--border-default)',
+                              borderRadius: '3px',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>

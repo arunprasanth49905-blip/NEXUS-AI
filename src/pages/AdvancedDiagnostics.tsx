@@ -38,11 +38,13 @@ import type {
 } from '../types';
 import type { OrchestratorStatusReport } from '../types/agent';
 import type { ToolEngineStatusReport } from '../types/tool';
+import type { AdaptiveEngineStatusReport } from '../types/adaptation.js';
 import { fetchSystemMetrics, fetchRuntimeStatus, executeBenchmark, fallbackRuntimeStatus } from '../services/system';
 import { PerceptionService, fallbackPerceptionStatus } from '../services/perception';
 import { api } from '../services/api';
 import { agentService } from '../services/agent';
 import { toolService } from '../services/tool';
+import { getLearningStatus } from '../services/adaptation.js';
 import './AdvancedDiagnostics.css';
 
 export interface AdvancedDiagnosticsProps {
@@ -84,6 +86,7 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
   const [contextMemory, setContextMemory] = useState<ContextMemoryStatusResponse>(fallbackContextMemoryStatus);
   const [orchestrator, setOrchestrator] = useState<OrchestratorStatusReport | null>(null);
   const [toolsStatus, setToolsStatus] = useState<ToolEngineStatusReport | null>(null);
+  const [adaptiveStatus, setAdaptiveStatus] = useState<AdaptiveEngineStatusReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -124,6 +127,13 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
       try {
         const tRes = await toolService.getStatus();
         setToolsStatus(tRes);
+      } catch {
+        // Fallback default
+      }
+
+      try {
+        const aRes = await getLearningStatus();
+        setAdaptiveStatus(aRes);
       } catch {
         // Fallback default
       }
@@ -751,6 +761,90 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
             </div>
           </div>
         )}
+      </Card>
+
+      {/* PHASE 7: ADAPTIVE INTELLIGENCE & USER PREFERENCES */}
+      <Card variant="default" padding="md" className="nexus-diag-card">
+        <div className="nexus-diag-card-header">
+          <div className="nexus-diag-card-title-wrap">
+            <Brain size={18} className="text-cyan" />
+            <h2 className="nexus-diag-card-title">ADAPTIVE INTELLIGENCE & CONTINUOUS LEARNING (PHASE 7)</h2>
+          </div>
+          <StatusBadge
+            status={adaptiveStatus?.status === 'READY' ? 'ready' : 'limited'}
+            label={adaptiveStatus?.status || 'READY'}
+          />
+        </div>
+
+        <div className="nexus-diag-props-grid">
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Adaptive Engine</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{adaptiveStatus?.status || 'READY'} (Behavioral Adaptation Only)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Preference Store</span>
+            <span className="nexus-diag-prop-val nexus-mono-val">
+              READY ({adaptiveStatus?.active_preferences_count ?? 0} Active / {adaptiveStatus?.total_preferences_count ?? 0} Total)
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Pending Suggestions</span>
+            <span className="nexus-diag-prop-val text-cyan">
+              {adaptiveStatus?.pending_suggestions_count ?? 0} Candidates (User Approval Required)
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Feedback System</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>READY ({adaptiveStatus?.total_feedback_count ?? 0} Verified Feedback Signals)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Learning Policy Engine</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>ENFORCED (Security &gt; Tool Policy &gt; User Preferences &gt; Context)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Personalization Engine</span>
+            <span className="nexus-diag-prop-val text-green">
+              <CheckCircle2 size={13} />
+              <span>{adaptiveStatus?.personalization_enabled ? 'READY (Scoped Retrieval)' : 'DISABLED'}</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Outcome Analyzer</span>
+            <span className="nexus-diag-prop-val nexus-mono-val">
+              READY ({adaptiveStatus?.strategy_records_count ?? 0} Recorded Empirical Strategies)
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Privacy Guard</span>
+            <span className="nexus-diag-prop-val text-cyan">
+              <ShieldCheck size={13} />
+              <span>PROTECTED (Tokens & Credentials Blocked from Preference Persistence)</span>
+            </span>
+          </div>
+
+          <div className="nexus-diag-prop">
+            <span className="nexus-diag-prop-key">Model Weight Retraining</span>
+            <span className="nexus-diag-prop-val text-yellow">
+              DISABLED (Zero Autonomous Fine-Tuning / No Silent Background LoRA)
+            </span>
+          </div>
+        </div>
       </Card>
 
       {/* BENCHMARKING SECTION */}

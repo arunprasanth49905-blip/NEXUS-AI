@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Sliders, 
   ShieldCheck, 
@@ -9,12 +9,29 @@ import {
   Lock, 
   Check, 
   RotateCcw,
-  CheckCircle2
+  CheckCircle2,
+  Brain,
+  Trash2,
+  Plus,
+  History,
+  AlertCircle
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import type { NavPage, ContextInfo, SystemStatusType } from '../types';
+import type { UserPreference, SuggestedPreferenceCandidate, LearningSettingsState } from '../types/adaptation.js';
+import {
+  getPreferences,
+  createPreference,
+  updatePreference,
+  deletePreference,
+  getCandidates,
+  resolveCandidate,
+  getLearningSettings,
+  updateLearningSettings,
+  getLearningHistory,
+} from '../services/adaptation.js';
 import './Settings.css';
 
 export interface SettingsProps {
@@ -32,7 +49,7 @@ export const Settings: React.FC<SettingsProps> = ({
   onNavigate,
   onAddToast,
 }) => {
-  const [activeSection, setActiveSection] = useState<'general' | 'ai' | 'privacy' | 'runtime' | 'about'>('general');
+  const [activeSection, setActiveSection] = useState<'general' | 'ai' | 'personalization' | 'privacy' | 'runtime' | 'about'>('general');
   
   // Settings values
   const [themeMode, setThemeMode] = useState<'dark' | 'system'>('dark');
@@ -41,6 +58,108 @@ export const Settings: React.FC<SettingsProps> = ({
   const [aiTone, setAiTone] = useState<'concise' | 'technical' | 'balanced'>('balanced');
   const [strictLocalOnly, setStrictLocalOnly] = useState(true);
   const [zeroTelemetry, setZeroTelemetry] = useState(true);
+
+  // Phase 7 Adaptive Intelligence State
+  const [learningSettings, setLearningSettings] = useState<LearningSettingsState>({
+    learning_enabled: true,
+    session_learning_enabled: true,
+    project_learning_enabled: true,
+    long_term_preferences_enabled: true,
+    feedback_enabled: true,
+    personalization_enabled: true,
+  });
+  const [preferences, setPreferences] = useState<UserPreference[]>([]);
+  const [candidates, setCandidates] = useState<SuggestedPreferenceCandidate[]>([]);
+  const [adaptationHistory, setAdaptationHistory] = useState<
+    Array<{ id: string; title: string; detail: string; timestamp: string; category: string }>
+  >([]);
+  
+  // New preference form
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
+  const [newCategory, setNewCategory] = useState<string>('response_style');
+  const [newScope, setNewScope] = useState<string>('USER');
+
+  const loadAdaptationData = useCallback(async () => {
+    try {
+      const [settingsData, prefsData, candsData, histData] = await Promise.all([
+        getLearningSettings(),
+        getPreferences(),
+        getCandidates(),
+        getLearningHistory(),
+      ]);
+      if (settingsData) setLearningSettings(settingsData);
+      setPreferences(prefsData);
+      setCandidates(candsData);
+      setAdaptationHistory(histData);
+    } catch {
+      // offline fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === 'personalization') {
+      loadAdaptationData();
+    }
+  }, [activeSection, loadAdaptationData]);
+
+  const handleToggleLearningSetting = async (key: keyof LearningSettingsState) => {
+    const updated = { ...learningSettings, [key]: !learningSettings[key] };
+    setLearningSettings(updated);
+    await updateLearningSettings(updated);
+    onAddToast('Learning Settings Updated', `${String(key)} set to ${updated[key]}`, 'info');
+  };
+
+  const handleResolveCandidate = async (candidateId: string, accept: boolean) => {
+    const success = await resolveCandidate(candidateId, accept);
+    if (success) {
+      onAddToast(
+        accept ? 'Preference Saved' : 'Candidate Dismissed',
+        accept ? 'Inferred suggestion converted to active preference.' : 'Candidate removed.',
+        accept ? 'success' : 'info'
+      );
+      loadAdaptationData();
+    }
+  };
+
+  const handleTogglePreference = async (pref: UserPreference) => {
+    const success = await updatePreference(pref.preference_id, { enabled: !pref.enabled });
+    if (success) {
+      setPreferences((prev) =>
+        prev.map((p) => (p.preference_id === pref.preference_id ? { ...p, enabled: !p.enabled } : p))
+      );
+      onAddToast('Preference Updated', `${pref.key} is now ${!pref.enabled ? 'active' : 'disabled'}.`, 'info');
+    }
+  };
+
+  const handleDeletePreference = async (preferenceId: string) => {
+    const success = await deletePreference(preferenceId);
+    if (success) {
+      setPreferences((prev) => prev.filter((p) => p.preference_id !== preferenceId));
+      onAddToast('Preference Deleted', 'Preference removed permanently.', 'info');
+    }
+  };
+
+  const handleCreateExplicitPreference = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newKey.trim() || !newValue.trim()) return;
+
+    const res = await createPreference({
+      category: newCategory,
+      key: newKey.trim(),
+      value: newValue.trim(),
+      scope: newScope,
+    });
+
+    if (res.success && res.preference) {
+      setPreferences((prev) => [res.preference!, ...prev]);
+      setNewKey('');
+      setNewValue('');
+      onAddToast('Preference Created', `Explicit rule for ${newKey} stored safely.`, 'success');
+    } else {
+      onAddToast('Could Not Save', res.error || 'Security or validation constraint violated', 'error');
+    }
+  };
 
   const handleSaveSettings = () => {
     onAddToast('Preferences saved', 'Local settings successfully updated.', 'success');
@@ -79,6 +198,7 @@ export const Settings: React.FC<SettingsProps> = ({
           {[
             { id: 'general', label: 'General', icon: <Sliders size={16} /> },
             { id: 'ai', label: 'AI Behavior', icon: <Sparkles size={16} /> },
+            { id: 'personalization', label: 'Learning & Preferences', icon: <Brain size={16} /> },
             { id: 'privacy', label: 'Privacy & Data', icon: <ShieldCheck size={16} /> },
             { id: 'runtime', label: 'Runtime & Edge', icon: <Cpu size={16} /> },
             { id: 'about', label: 'About NEXUS EDGE', icon: <Info size={16} /> },
@@ -211,6 +331,347 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                   <span className="nexus-badge-tag">Phase 2 Target: Local Edge Model</span>
                 </div>
+              </Card>
+            </div>
+          )}
+
+          {/* PERSONALIZATION & ADAPTIVE INTELLIGENCE (PHASE 7) */}
+          {activeSection === 'personalization' && (
+            <div className="nexus-settings-section animate-fade-in">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 className="nexus-section-heading">Adaptive Intelligence & User Preferences</h2>
+                  <p className="nexus-section-subheading">
+                    Control behavioral adaptation, explicit preferences, and continuous learning policies without model retraining.
+                  </p>
+                </div>
+                <span className="nexus-badge-tag nexus-tag-cyan" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ShieldCheck size={13} />
+                  Privacy Guard Enforced
+                </span>
+              </div>
+
+              {/* Master & Scoped Toggles (Section 25) */}
+              <Card variant="default" padding="md" className="nexus-settings-card">
+                <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
+                  LEARNING POLICY CONTROLS
+                </h3>
+
+                <div className="nexus-setting-row">
+                  <div className="nexus-setting-info">
+                    <span className="nexus-setting-title">Adaptive Intelligence</span>
+                    <span className="nexus-setting-desc">Allow NEXUS to adapt responses based on approved feedback and explicit rules.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="nexus-checkbox"
+                    checked={learningSettings.learning_enabled}
+                    onChange={() => handleToggleLearningSetting('learning_enabled')}
+                  />
+                </div>
+
+                <div className="nexus-setting-divider" />
+
+                <div className="nexus-setting-row">
+                  <div className="nexus-setting-info">
+                    <span className="nexus-setting-title">Personalization Engine</span>
+                    <span className="nexus-setting-desc">Apply relevant saved preferences into planning and prompt context.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="nexus-checkbox"
+                    checked={learningSettings.personalization_enabled}
+                    onChange={() => handleToggleLearningSetting('personalization_enabled')}
+                  />
+                </div>
+
+                <div className="nexus-setting-divider" />
+
+                <div className="nexus-setting-row">
+                  <div className="nexus-setting-info">
+                    <span className="nexus-setting-title">Long-Term Preferences</span>
+                    <span className="nexus-setting-desc">Persist user-level preferences across sessions.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="nexus-checkbox"
+                    checked={learningSettings.long_term_preferences_enabled}
+                    onChange={() => handleToggleLearningSetting('long_term_preferences_enabled')}
+                  />
+                </div>
+
+                <div className="nexus-setting-divider" />
+
+                <div className="nexus-setting-row">
+                  <div className="nexus-setting-info">
+                    <span className="nexus-setting-title">Project-Level Learning</span>
+                    <span className="nexus-setting-desc">Scope formatting and workflow preferences strictly to current active project.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="nexus-checkbox"
+                    checked={learningSettings.project_learning_enabled}
+                    onChange={() => handleToggleLearningSetting('project_learning_enabled')}
+                  />
+                </div>
+
+                <div className="nexus-setting-divider" />
+
+                <div className="nexus-setting-row">
+                  <div className="nexus-setting-info">
+                    <span className="nexus-setting-title">Session-Only Learning</span>
+                    <span className="nexus-setting-desc">Permit temporary conversational adaptations during active session only.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="nexus-checkbox"
+                    checked={learningSettings.session_learning_enabled}
+                    onChange={() => handleToggleLearningSetting('session_learning_enabled')}
+                  />
+                </div>
+
+                <div className="nexus-setting-divider" />
+
+                <div className="nexus-setting-row">
+                  <div className="nexus-setting-info">
+                    <span className="nexus-setting-title">Feedback Collection</span>
+                    <span className="nexus-setting-desc">Collect thumbs up/down signals to adapt task strategies.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="nexus-checkbox"
+                    checked={learningSettings.feedback_enabled}
+                    onChange={() => handleToggleLearningSetting('feedback_enabled')}
+                  />
+                </div>
+              </Card>
+
+              {/* Inferred Preference Candidates (Section 8 & 38) */}
+              {candidates.length > 0 && (
+                <Card variant="elevated" padding="md" style={{ borderLeft: '3px solid var(--accent-cyan)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <AlertCircle size={16} className="text-cyan" />
+                    <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      SUGGESTED PREFERENCES ({candidates.length} Pending Approval)
+                    </h3>
+                  </div>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                    NEXUS noticed behavioral patterns during recent tasks. Suggestions require your explicit approval before being saved.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {candidates.map((c) => (
+                      <div
+                        key={c.candidate_id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px',
+                          background: 'var(--bg-surface-elevated)',
+                          borderRadius: 'var(--radius-sm)',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
+                            {c.key}: <span style={{ color: 'var(--accent-primary-hover)' }}>{c.value}</span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{c.rationale}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleResolveCandidate(c.candidate_id, true)}
+                          >
+                            Save Preference
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleResolveCandidate(c.candidate_id, false)}
+                          >
+                            Ignore
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* Add Explicit Preference (Section 6 & 7) */}
+              <Card variant="default" padding="md">
+                <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
+                  ADD EXPLICIT USER PREFERENCE
+                </h3>
+                <form onSubmit={handleCreateExplicitPreference} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', alignItems: 'end' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Category</label>
+                    <select
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      style={{ width: '100%', padding: '6px', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', color: 'var(--text-primary)', fontSize: '12px' }}
+                    >
+                      <option value="response_style">Response Style</option>
+                      <option value="explanation_depth">Explanation Depth</option>
+                      <option value="output_format">Output Format</option>
+                      <option value="language">Language</option>
+                      <option value="workflow">Workflow</option>
+                      <option value="tool_behavior">Tool Behavior</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Preference Key</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. explanation_level"
+                      value={newKey}
+                      onChange={(e) => setNewKey(e.target.value)}
+                      style={{ width: '100%', padding: '6px', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', color: 'var(--text-primary)', fontSize: '12px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Value</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. simple"
+                      value={newValue}
+                      onChange={(e) => setNewValue(e.target.value)}
+                      style={{ width: '100%', padding: '6px', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', color: 'var(--text-primary)', fontSize: '12px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Scope</label>
+                    <select
+                      value={newScope}
+                      onChange={(e) => setNewScope(e.target.value)}
+                      style={{ width: '100%', padding: '6px', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', color: 'var(--text-primary)', fontSize: '12px' }}
+                    >
+                      <option value="USER">User (Global)</option>
+                      <option value="PROJECT">Project Scoped</option>
+                      <option value="TASK">Task Scoped</option>
+                      <option value="SESSION">Session Only</option>
+                    </select>
+                  </div>
+
+                  <Button type="submit" variant="primary" size="sm" leftIcon={<Plus size={14} />}>
+                    Save Rule
+                  </Button>
+                </form>
+              </Card>
+
+              {/* Saved Preferences List (Section 25 & 26) */}
+              <Card variant="default" padding="md">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    SAVED PREFERENCES ({preferences.length})
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Data priority: Security &gt; Tool Policy &gt; Preferences &gt; Task Context
+                  </span>
+                </div>
+
+                {preferences.length === 0 ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                    No preferences saved yet. Speak to NEXUS (e.g. &ldquo;Always explain things simply&rdquo;) or add one above.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {preferences.map((p) => (
+                      <div
+                        key={p.preference_id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 14px',
+                          background: 'var(--bg-surface-elevated)',
+                          borderRadius: 'var(--radius-sm)',
+                          borderLeft: p.enabled ? '3px solid var(--accent-green)' : '3px solid var(--text-tertiary)',
+                          opacity: p.enabled ? 1 : 0.6,
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
+                              {p.key}: <span style={{ color: 'var(--accent-primary-hover)' }}>{p.value}</span>
+                            </span>
+                            <span className="nexus-badge-tag" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
+                              {p.scope}
+                            </span>
+                            <span className="nexus-badge-tag" style={{ fontSize: '10px' }}>
+                              {p.category}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            Source: {p.source.replace(/_/g, ' ')} • Created: {new Date(p.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleTogglePreference(p)}
+                          >
+                            {p.enabled ? 'Disable' : 'Enable'}
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => handleDeletePreference(p.preference_id)}
+                          >
+                            <Trash2 size={13} />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Adaptation History (Section 28) */}
+              <Card variant="default" padding="md">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                  <History size={15} className="text-blue" />
+                  <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    ADAPTATION HISTORY
+                  </h3>
+                </div>
+
+                {adaptationHistory.length === 0 ? (
+                  <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                    No adaptation events recorded yet.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {adaptationHistory.slice(0, 10).map((h) => (
+                      <div
+                        key={h.id}
+                        style={{
+                          fontSize: '12px',
+                          padding: '6px 10px',
+                          background: 'var(--bg-surface-elevated)',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{h.title}</span>
+                          <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>{h.detail}</span>
+                        </div>
+                        <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                          {new Date(h.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Card>
             </div>
           )}
