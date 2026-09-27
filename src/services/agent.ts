@@ -11,19 +11,25 @@ import type {
   ApprovalRequirement,
   AgentExecutionRecord,
 } from '../types';
-import { getApiBaseUrl } from './api';
-
-const API_BASE_URL = getApiBaseUrl();
+import { API_BASE_URL, buildApiUrl } from './api';
 
 class AgentService {
   private baseUrl: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = baseUrl;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    const url = buildApiUrl(endpoint, this.baseUrl);
+    
+    const isDev =
+      (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.DEV)) ||
+      (typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV !== 'production');
+    if (isDev) {
+      console.log(`[NEXUS AgentService] ${options.method || 'GET'} ${url} (Base: ${this.baseUrl || 'relative'})`);
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 65000); // Allow time for multi-step agent execution
 

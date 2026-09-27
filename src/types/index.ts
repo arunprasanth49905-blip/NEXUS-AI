@@ -3,12 +3,12 @@
  * Phase 1, Phase 2 (Runtime), Phase 3 (Multimodal Perception), & Phase 4 (Context & Memory)
  */
 
-export * from './runtime';
-export * from './perception';
-export * from './context_memory';
-export * from './agent';
-export * from './tool';
-export * from './adaptation';
+export * from './runtime.js';
+export * from './perception.js';
+export * from './context_memory.js';
+export * from './agent.js';
+export * from './tool.js';
+export * from './adaptation.js';
 
 export type NavPage = 
   | 'home' 

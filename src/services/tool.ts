@@ -8,14 +8,14 @@ import type {
   ToolEngineStatusReport,
   ActionAuditEvent,
 } from '../types/tool.js';
-import { getApiBaseUrl } from './api';
+import { API_BASE_URL, buildApiUrl } from './api';
 
 export class ToolService {
   private static instance: ToolService | null = null;
   private baseUrl: string;
 
-  constructor() {
-    this.baseUrl = getApiBaseUrl();
+  constructor(baseUrl: string = API_BASE_URL) {
+    this.baseUrl = baseUrl;
   }
 
   public static getInstance(): ToolService {
@@ -25,47 +25,51 @@ export class ToolService {
     return ToolService.instance;
   }
 
-  public async getTools(): Promise<{ tools: ToolInfo[]; total: number; enabled: number }> {
-    const res = await fetch(`${this.baseUrl}/tools`);
-    if (!res.ok) throw new Error(`Failed to fetch tools: ${res.statusText}`);
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const url = buildApiUrl(endpoint, this.baseUrl);
+    const isDev =
+      (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.DEV)) ||
+      (typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV !== 'production');
+    if (isDev) {
+      console.log(`[NEXUS ToolService] ${options.method || 'GET'} ${url} (Base: ${this.baseUrl || 'relative'})`);
+    }
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Tool request to '${url}' failed with HTTP ${res.status}: ${res.statusText}`);
+    }
     return res.json();
+  }
+
+  public async getTools(): Promise<{ tools: ToolInfo[]; total: number; enabled: number }> {
+    return this.request<{ tools: ToolInfo[]; total: number; enabled: number }>('/tools');
   }
 
   public async getTool(toolId: string): Promise<{ tool: ToolInfo }> {
-    const res = await fetch(`${this.baseUrl}/tools/${toolId}`);
-    if (!res.ok) throw new Error(`Failed to fetch tool '${toolId}': ${res.statusText}`);
-    return res.json();
+    return this.request<{ tool: ToolInfo }>(`/tools/${toolId}`);
   }
 
   public async getCapabilities(): Promise<{ capabilities: Record<string, string[]> }> {
-    const res = await fetch(`${this.baseUrl}/tools/capabilities`);
-    if (!res.ok) throw new Error(`Failed to fetch capabilities: ${res.statusText}`);
-    return res.json();
+    return this.request<{ capabilities: Record<string, string[]> }>('/tools/capabilities');
   }
 
   public async getStatus(): Promise<ToolEngineStatusReport> {
-    const res = await fetch(`${this.baseUrl}/tools/status`);
-    if (!res.ok) throw new Error(`Failed to fetch tool engine status: ${res.statusText}`);
-    return res.json();
+    return this.request<ToolEngineStatusReport>('/tools/status');
   }
 
   public async getPolicies(): Promise<Record<string, unknown>> {
-    const res = await fetch(`${this.baseUrl}/tools/policies`);
-    if (!res.ok) throw new Error(`Failed to fetch tool policies: ${res.statusText}`);
-    return res.json();
+    return this.request<Record<string, unknown>>('/tools/policies');
   }
 
   public async validateInput(
     toolId: string,
     input: Record<string, unknown>
   ): Promise<{ valid: boolean; errors: string[] }> {
-    const res = await fetch(`${this.baseUrl}/tools/validate`, {
+    return this.request<{ valid: boolean; errors: string[] }>('/tools/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool_id: toolId, input }),
     });
-    if (!res.ok) throw new Error(`Failed to validate input: ${res.statusText}`);
-    return res.json();
   }
 
   public async executeTool(params: {
@@ -76,36 +80,25 @@ export class ToolService {
     agent_id?: string;
     approval_id?: string;
   }): Promise<ToolResult> {
-    const res = await fetch(`${this.baseUrl}/tools/execute`, {
+    return this.request<ToolResult>('/tools/execute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Tool execution failed with status ${res.status}`);
-    }
-    return res.json();
   }
 
   public async getActions(limit: number = 50): Promise<{ actions: ActionAuditEvent[]; total: number }> {
-    const res = await fetch(`${this.baseUrl}/actions?limit=${limit}`);
-    if (!res.ok) throw new Error(`Failed to fetch actions: ${res.statusText}`);
-    return res.json();
+    return this.request<{ actions: ActionAuditEvent[]; total: number }>(`/actions?limit=${limit}`);
   }
 
   public async getAction(actionId: string): Promise<{ action: ActionAuditEvent }> {
-    const res = await fetch(`${this.baseUrl}/actions/${actionId}`);
-    if (!res.ok) throw new Error(`Failed to fetch action '${actionId}': ${res.statusText}`);
-    return res.json();
+    return this.request<{ action: ActionAuditEvent }>(`/actions/${actionId}`);
   }
 
   public async cancelExecution(executionId: string): Promise<{ success: boolean }> {
-    const res = await fetch(`${this.baseUrl}/tools/executions/${executionId}/cancel`, {
+    return this.request<{ success: boolean }>(`/tools/executions/${executionId}/cancel`, {
       method: 'POST',
     });
-    if (!res.ok) throw new Error(`Failed to cancel execution '${executionId}': ${res.statusText}`);
-    return res.json();
   }
 }
 

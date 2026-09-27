@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "start": "tsx server.ts",
     "lint": "oxlint",
-    "test": "tsx --test server/test_runtime.ts server/test_perception.ts server/test_context_memory.ts server/test_agents.ts server/test_tools.ts server/test_adaptation.ts server/test_assistant.ts server/test_backend_audit.ts",
+    "test": "tsx --test server/test_runtime.ts server/test_perception.ts server/test_context_memory.ts server/test_agents.ts server/test_tools.ts server/test_adaptation.ts server/test_assistant.ts server/test_backend_audit.ts server/test_api_url.ts",
     "preview": "vite preview --host 0.0.0.0 --port 3000"
   },
   "dependencies": {

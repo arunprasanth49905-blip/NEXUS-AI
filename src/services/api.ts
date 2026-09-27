@@ -26,28 +26,44 @@ import type {
   ContextSession,
   MemorySearchResult,
   MemoryType,
-} from '../types';
+} from '../types/index.js';
 
+import { normalizeApiBaseUrl, buildApiUrl } from './apiUrl.js';
+
+export { normalizeApiBaseUrl, buildApiUrl };
+
+/**
+ * Expected backend base URL from Vite environment (normalized without /api/v1).
+ * Example: https://<ACTUAL-RENDER-SERVICE>.onrender.com
+ */
+export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+
+/**
+ * Returns the normalized full API base with /api/v1.
+ * e.g. https://<render-service>.onrender.com/api/v1 or /api/v1
+ */
 export function getApiBaseUrl(): string {
-  const rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
-  if (!rawBase) {
-    return '/api/v1';
-  }
-  return rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
+  return buildApiUrl('', API_BASE_URL);
 }
-
-const API_BASE_URL = getApiBaseUrl();
 
 class ApiService {
   private baseUrl: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = normalizeApiBaseUrl(baseUrl);
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    const url = buildApiUrl(endpoint, this.baseUrl);
     
+    // Task 9: Safe API debug information in development only
+    const isDev =
+      (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.DEV)) ||
+      (typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV !== 'production');
+    if (isDev) {
+      console.log(`[NEXUS API Client] ${options.method || 'GET'} ${url} (Base: ${this.baseUrl || 'relative'})`);
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
@@ -67,24 +83,28 @@ class ApiService {
       if (!response.ok) {
         let errorMsg = `Service returned HTTP ${response.status}: ${response.statusText}`;
         try {
-          const errData = await response.json();
-          if (errData && errData.error) errorMsg = errData.error;
+          const errData: any = await response.json();
+          if (errData && errData.error) {
+            errorMsg = typeof errData.error === 'string' ? errData.error : (errData.error.message || errorMsg);
+          } else if (errData && errData.message) {
+            errorMsg = errData.message;
+          }
         } catch {
-          // ignore json parse error on non-json body
+          // ignore non-json error bodies
         }
         throw new Error(errorMsg);
       }
 
-      return await response.json();
+      return (await response.json()) as T;
     } catch (err: unknown) {
       clearTimeout(timeoutId);
       if (err instanceof Error) {
         if (err.name === 'AbortError') {
-          throw new Error('Connection timed out. Local NEXUS service may be unresponsive.');
+          throw new Error('Connection timed out. Backend service may be waking up or unresponsive.');
         }
-        throw new Error(err.message || 'Unable to connect to local NEXUS edge service.');
+        throw err;
       }
-      throw new Error('An unexpected error occurred while communicating with the edge service.');
+      throw new Error('An unexpected error occurred while communicating with the backend service.');
     }
   }
 
