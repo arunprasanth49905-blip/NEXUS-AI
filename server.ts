@@ -510,68 +510,159 @@ app.get('/api/v1/perception/status', (_req, res) => {
 });
 
 app.post('/api/v1/perception/text', (req, res) => {
+  const reqId = (req as any).id || `req-${Date.now()}`;
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) {
-    res.status(400).json({ error: 'Text content is required' });
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'MISSING_TEXT',
+        category: 'VALIDATION_ERROR',
+        message: 'Text content is required',
+        details: 'The request body must include a non-empty text string.',
+      },
+      requestId: reqId,
+    });
     return;
   }
-  const context = perceptionManager.processText(text, { userAgent: req.headers['user-agent'] || 'Browser' });
-  res.json({ success: true, context });
+  try {
+    const context = perceptionManager.processText(text, { userAgent: req.headers['user-agent'] || 'Browser' }, reqId);
+    res.json({ success: true, context, requestId: reqId });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Text perception failed';
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'TEXT_PROCESSING_ERROR',
+        category: 'VALIDATION_ERROR',
+        message: msg,
+        details: msg,
+      },
+      requestId: reqId,
+    });
+  }
 });
 
 app.post('/api/v1/perception/screen', async (req, res) => {
+  const reqId = (req as any).id || `req-${Date.now()}`;
   try {
     const body: ScreenCaptureRequest = req.body;
     if (!body?.image_data_base64) {
-      res.status(400).json({ error: 'image_data_base64 is required for screen perception.' });
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_IMAGE_DATA',
+          category: 'VALIDATION_ERROR',
+          message: 'image_data_base64 is required for screen perception.',
+          details: 'Provide a valid base64 data URL string representing the captured screen frame.',
+        },
+        requestId: reqId,
+      });
       return;
     }
-    const context = await perceptionManager.processScreen(body);
-    res.json({ success: true, context });
+    const context = await perceptionManager.processScreen(body, reqId);
+    res.json({ success: true, context, requestId: reqId });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Screen capture perception failed';
-    res.status(400).json({ success: false, error: msg });
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'SCREEN_PROCESSING_ERROR',
+        category: 'CAPABILITY_UNAVAILABLE',
+        message: msg,
+        details: msg,
+      },
+      requestId: reqId,
+    });
   }
 });
 
 app.post('/api/v1/perception/camera', async (req, res) => {
+  const reqId = (req as any).id || `req-${Date.now()}`;
   try {
     const body: CameraCaptureRequest = req.body;
     if (!body?.image_data_base64) {
-      res.status(400).json({ error: 'image_data_base64 is required for camera perception.' });
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_IMAGE_DATA',
+          category: 'VALIDATION_ERROR',
+          message: 'image_data_base64 is required for camera perception.',
+          details: 'Provide a valid base64 data URL string representing the captured camera snapshot.',
+        },
+        requestId: reqId,
+      });
       return;
     }
-    const context = await perceptionManager.processCamera(body);
-    res.json({ success: true, context });
+    const context = await perceptionManager.processCamera(body, reqId);
+    res.json({ success: true, context, requestId: reqId });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Camera perception failed';
-    res.status(400).json({ success: false, error: msg });
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'CAMERA_PROCESSING_ERROR',
+        category: 'CAPABILITY_UNAVAILABLE',
+        message: msg,
+        details: msg,
+      },
+      requestId: reqId,
+    });
   }
 });
 
 app.post('/api/v1/perception/voice', (req, res) => {
+  const reqId = (req as any).id || `req-${Date.now()}`;
   try {
     const body: VoiceTranscriptionRequest = req.body;
     if (!body?.transcript || !body.transcript.trim()) {
-      res.status(400).json({ error: 'Transcript is required for voice perception.' });
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_TRANSCRIPT',
+          category: 'VALIDATION_ERROR',
+          message: 'Transcript is required for voice perception.',
+          details: 'Provide transcribed speech text in the transcript field.',
+        },
+        requestId: reqId,
+      });
       return;
     }
-    const context = perceptionManager.processVoice(body);
-    res.json({ success: true, context });
+    const context = perceptionManager.processVoice(body, reqId);
+    res.json({ success: true, context, requestId: reqId });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Voice perception failed';
-    res.status(400).json({ success: false, error: msg });
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VOICE_PROCESSING_ERROR',
+        category: 'EXTRACTION_ERROR',
+        message: msg,
+        details: msg,
+      },
+      requestId: reqId,
+    });
   }
 });
 
 app.post('/api/v1/perception/document', async (req, res) => {
+  const reqId = (req as any).id || `req-${Date.now()}`;
   try {
     const filename = req.body?.filename;
     const base64Data = req.body?.base64_data;
     const mimeType = req.body?.mime_type;
 
     if (!filename || !base64Data) {
-      res.status(400).json({ error: 'filename and base64_data are required for document perception.' });
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_DOCUMENT_PAYLOAD',
+          category: 'VALIDATION_ERROR',
+          message: 'filename and base64_data are required for document perception.',
+          details: 'Both filename and base64_data must be provided in the request body.',
+        },
+        requestId: reqId,
+      });
       return;
     }
 
@@ -587,29 +678,41 @@ app.post('/api/v1/perception/document', async (req, res) => {
     await fs.promises.writeFile(filePath, buffer);
 
     try {
-      const context = await perceptionManager.processDocument(filePath, filename, buffer.length, mimeType);
-      res.json({ success: true, context });
+      const context = await perceptionManager.processDocument(filePath, filename, buffer.length, mimeType, reqId);
+      res.json({ success: true, context, requestId: reqId });
     } finally {
       fs.promises.unlink(filePath).catch(() => {});
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Document perception failed';
-    res.status(400).json({ success: false, error: msg });
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'DOCUMENT_PROCESSING_ERROR',
+        category: 'EXTRACTION_ERROR',
+        message: msg,
+        details: msg,
+      },
+      requestId: reqId,
+    });
   }
 });
 
-app.get('/api/v1/perception/context', (_req, res) => {
+app.get('/api/v1/perception/context', (req, res) => {
+  const reqId = (req as any).id || `req-${Date.now()}`;
   res.json({
     contexts: perceptionManager.getAllContexts(),
     timestamp: new Date().toISOString(),
+    requestId: reqId,
   });
 });
 
 app.post('/api/v1/perception/context/merge', (req, res) => {
+  const reqId = (req as any).id || `req-${Date.now()}`;
   const contextIds: string[] = Array.isArray(req.body?.context_ids) ? req.body.context_ids : [];
   const primaryQuery = req.body?.primary_query || '';
   const merged = perceptionManager.mergeContexts(contextIds, primaryQuery);
-  res.json({ success: true, unified_context: merged });
+  res.json({ success: true, unified_context: merged, requestId: reqId });
 });
 
 // ----------------------------------------------------

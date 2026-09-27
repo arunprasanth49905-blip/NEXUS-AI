@@ -1,0 +1,147 @@
+/* NEXUS EDGE - Phase 3 Multimodal Perception Workspace Bar */
+
+.nexus-perception-workspace {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nexus-active-inputs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.nexus-active-inputs-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.nexus-active-inputs-items {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.nexus-input-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nexus-indicator-label {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+}
+
+.nexus-indicator-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nexus-indicator-pill.ready {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.nexus-indicator-pill.active {
+  background: rgba(6, 182, 212, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+}
+
+.nexus-indicator-pill.requesting {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.nexus-indicator-pill.off,
+.nexus-indicator-pill.stopped {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.nexus-indicator-pill.denied,
+.nexus-indicator-pill.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.nexus-indicator-pill.unavailable {
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+/* Perception Context Card */
+.nexus-perception-context-card {
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.nexus-context-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--accent-cyan, #06b6d4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.nexus-context-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px 14px;
+}
+
+.nexus-context-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nexus-context-field-key {
+  font-size: 10px;
+  color: var(--text-tertiary, #64748b);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.nexus-context-field-val {
+  font-size: 11px;
+  color: var(--text-primary, #f1f5f9);
+  font-weight: 500;
+  word-break: break-word;
+}

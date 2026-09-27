@@ -1,24 +1,40 @@
+/**
+ * NEXUS-AI Phase 3 Multimodal Perception Engine
+ * Perception Manager (Central Coordinator)
+ */
+
 import { PrivacyGuard } from './privacy.js';
-import { LocalOCRProvider, LocalVisionProvider, SpeechProvider } from './providers.js';
-import { DocumentExtractor } from './extractor.js';
+import { PerceptionStatusReporter } from './status.js';
+import { PerceptionContextEngine } from './context.js';
+import { TextPerceptionSource } from './providers/text.js';
+import { ScreenPerceptionSource } from './providers/screen.js';
+import { CameraPerceptionSource } from './providers/camera.js';
+import { VoicePerceptionSource } from './providers/voice.js';
+import { DocumentPerceptionSource } from './providers/document.js';
 import type {
   NexusContextObject,
   UnifiedMultimodalContext,
   PerceptionStatusResponse,
-  PerceptionModality,
   ScreenCaptureRequest,
   CameraCaptureRequest,
   VoiceTranscriptionRequest,
-} from '../../src/types/perception.js';
+  PerceptionSource,
+  PerceptionModality,
+} from './models.js';
 
 export class PerceptionManager {
   private static instance: PerceptionManager;
   private privacyGuard = PrivacyGuard.getInstance();
-  private ocrProvider = new LocalOCRProvider();
-  private visionProvider = new LocalVisionProvider();
-  private speechProvider = new SpeechProvider();
+  private statusReporter = PerceptionStatusReporter.getInstance();
 
-  // In-memory active contexts for current session (bounded, auto-expiring)
+  // Modality Sources
+  private textSource = new TextPerceptionSource();
+  private screenSource = new ScreenPerceptionSource();
+  private cameraSource = new CameraPerceptionSource();
+  private voiceSource = new VoicePerceptionSource();
+  private documentSource = new DocumentPerceptionSource();
+
+  // In-memory active contexts for current session (bounded, ephemeral)
   private sessionContexts: Map<string, NexusContextObject> = new Map();
 
   private constructor() {}
@@ -30,224 +46,69 @@ export class PerceptionManager {
     return PerceptionManager.instance;
   }
 
+  public getPrivacyGuard(): PrivacyGuard {
+    return this.privacyGuard;
+  }
+
   public getStatus(): PerceptionStatusResponse {
-    return {
-      modalities: {
-        text: { available: true, status: 'READY' },
-        screen: { available: true, status: 'READY' },
-        camera: { available: true, status: 'READY' },
-        voice: { available: true, status: 'READY' },
-        document: { available: true, status: 'READY' },
-      },
-      providers: {
-        ocr: {
-          available: this.ocrProvider.isAvailable(),
-          status: this.ocrProvider.getStatus(),
-          engine: this.ocrProvider.getEngine(),
-          reason: 'Native OCR binary not configured; image metadata parsed without fabricated text.',
-        },
-        vision: {
-          available: this.visionProvider.isAvailable(),
-          status: this.visionProvider.getStatus(),
-          engine: this.visionProvider.getEngine(),
-        },
-        speech: {
-          available: this.speechProvider.isAvailable(),
-          status: this.speechProvider.getStatus(),
-          engine: this.speechProvider.getEngine(),
-        },
-      },
-      privacy_guard: {
-        active: true,
-        enforce_zero_raw_retention: true,
-        max_document_size_mb: 25,
-      },
-    };
+    return this.statusReporter.getStatus();
+  }
+
+  public getSource(modality: PerceptionModality): PerceptionSource<unknown, NexusContextObject> | undefined {
+    switch (modality) {
+      case 'text':
+        return this.textSource as unknown as PerceptionSource<unknown, NexusContextObject>;
+      case 'screen':
+        return this.screenSource as unknown as PerceptionSource<unknown, NexusContextObject>;
+      case 'camera':
+        return this.cameraSource as unknown as PerceptionSource<unknown, NexusContextObject>;
+      case 'voice':
+        return this.voiceSource as unknown as PerceptionSource<unknown, NexusContextObject>;
+      case 'document':
+        return this.documentSource as unknown as PerceptionSource<unknown, NexusContextObject>;
+      default:
+        return undefined;
+    }
   }
 
   // 1. TEXT PERCEPTION
-  public processText(text: string, clientMeta?: Record<string, string>): NexusContextObject {
-    const contextId = `ctx-text-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-
-    // Detect technical keywords/errors in text
-    const errors: string[] = [];
-    if (/error|exception|fail|timeout|typeerror|referenceerror/i.test(text)) {
-      const match = text.match(/(?:error|exception|fail):\s*([^\n.]+)/i);
-      if (match) errors.push(match[0].trim());
-    }
-
-    const context: NexusContextObject = {
-      context_id: contextId,
-      timestamp: new Date().toISOString(),
-      source: 'text',
-      modality: 'text',
-      content_type: 'text/plain',
-      content: { text: text.trim(), rawInput: text },
-      extracted_information: {
-        textSnippet: text.slice(0, 300),
-        wordCount,
-        errorsDetected: errors.length > 0 ? errors : undefined,
-      },
-      source_metadata: {
-        browser: clientMeta?.userAgent,
-      },
-      privacy: this.privacyGuard.createPrivacyMetadata('text', true),
-      confidence: null,
-      provenance: {
-        captureMechanism: 'user_typed_input',
-        pipelineVersion: 'Phase 3.0',
-      },
-    };
-
-    this.sessionContexts.set(contextId, context);
+  public processText(
+    text: string,
+    clientMeta?: Record<string, string>,
+    requestId?: string
+  ): NexusContextObject {
+    const context = this.textSource.process(text, { clientMeta, requestId });
+    this.sessionContexts.set(context.context_id, context);
     return context;
   }
 
   // 2. SCREEN PERCEPTION
-  public async processScreen(req: ScreenCaptureRequest): Promise<NexusContextObject> {
-    const contextId = `ctx-screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const validation = this.privacyGuard.validateCapture({
-      modality: 'screen',
-      userInitiated: true,
-      permissionGranted: true,
-    });
-
-    if (!validation.allowed) {
-      throw new Error(validation.reason);
-    }
-
-    // Inspect visual frame
-    const vision = this.visionProvider.inspectFrame(req.image_data_base64);
-    const ocr = await this.ocrProvider.extractText(req.image_data_base64);
-
-    const context: NexusContextObject = {
-      context_id: contextId,
-      timestamp: req.timestamp || new Date().toISOString(),
-      source: 'screen',
-      modality: 'visual',
-      content_type: 'image/png',
-      content: {
-        previewUrl: `[Local Screen Capture Frame: ${req.width || 1920}x${req.height || 1080}]`,
-        dataUrlPreview: req.image_data_base64.slice(0, 100) + '...', // Transient trace only
-      },
-      extracted_information: {
-        visualMetadata: {
-          dimensions: vision.dimensions || { width: req.width || 1920, height: req.height || 1080 },
-          format: 'PNG',
-          hasTextContent: ocr.hasText,
-          ocrAvailable: this.ocrProvider.isAvailable(),
-          visionAvailable: this.visionProvider.isAvailable(),
-        },
-        textSnippet: ocr.hasText ? ocr.text : undefined,
-      },
-      source_metadata: {
-        resolution: `${req.width || 1920}x${req.height || 1080}`,
-        mimeType: 'image/png',
-      },
-      privacy: this.privacyGuard.createPrivacyMetadata('screen', true),
-      confidence: null,
-      provenance: {
-        captureMechanism: 'browser_getDisplayMedia_single_frame',
-        pipelineVersion: 'Phase 3.0',
-      },
-    };
-
-    this.sessionContexts.set(contextId, context);
+  public async processScreen(
+    req: ScreenCaptureRequest,
+    requestId?: string
+  ): Promise<NexusContextObject> {
+    const context = await this.screenSource.process(req, { requestId });
+    this.sessionContexts.set(context.context_id, context);
     return context;
   }
 
   // 3. CAMERA PERCEPTION
-  public async processCamera(req: CameraCaptureRequest): Promise<NexusContextObject> {
-    const contextId = `ctx-cam-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const validation = this.privacyGuard.validateCapture({
-      modality: 'camera',
-      userInitiated: true,
-      permissionGranted: true,
-    });
-
-    if (!validation.allowed) {
-      throw new Error(validation.reason);
-    }
-
-    const vision = this.visionProvider.inspectFrame(req.image_data_base64);
-
-    const context: NexusContextObject = {
-      context_id: contextId,
-      timestamp: req.timestamp || new Date().toISOString(),
-      source: 'camera',
-      modality: 'visual',
-      content_type: 'image/jpeg',
-      content: {
-        previewUrl: `[Local Camera Snapshot: ${req.width || 640}x${req.height || 480}]`,
-      },
-      extracted_information: {
-        visualMetadata: {
-          dimensions: vision.dimensions || { width: req.width || 640, height: req.height || 480 },
-          format: 'JPEG',
-          visionAvailable: this.visionProvider.isAvailable(),
-        },
-      },
-      source_metadata: {
-        resolution: `${req.width || 640}x${req.height || 480}`,
-        mimeType: 'image/jpeg',
-      },
-      privacy: this.privacyGuard.createPrivacyMetadata('camera', true),
-      confidence: null,
-      provenance: {
-        captureMechanism: 'browser_getUserMedia_user_triggered_snapshot',
-        pipelineVersion: 'Phase 3.0',
-      },
-    };
-
-    this.sessionContexts.set(contextId, context);
+  public async processCamera(
+    req: CameraCaptureRequest,
+    requestId?: string
+  ): Promise<NexusContextObject> {
+    const context = await this.cameraSource.process(req, { requestId });
+    this.sessionContexts.set(context.context_id, context);
     return context;
   }
 
   // 4. VOICE PERCEPTION
-  public processVoice(req: VoiceTranscriptionRequest): NexusContextObject {
-    const contextId = `ctx-voice-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const validation = this.privacyGuard.validateCapture({
-      modality: 'voice',
-      userInitiated: true,
-      permissionGranted: true,
-    });
-
-    if (!validation.allowed) {
-      throw new Error(validation.reason);
-    }
-
-    const wordCount = req.transcript.trim().split(/\s+/).filter(Boolean).length;
-
-    const context: NexusContextObject = {
-      context_id: contextId,
-      timestamp: new Date().toISOString(),
-      source: 'voice',
-      modality: 'audio',
-      content_type: 'audio/transcript',
-      content: {
-        text: req.transcript.trim(),
-      },
-      extracted_information: {
-        textSnippet: req.transcript.slice(0, 300),
-        wordCount,
-        audioMetadata: {
-          durationSeconds: req.duration_seconds || Math.round(wordCount / 2.5),
-          transcriptionEngine: req.speech_engine || 'Browser Native SpeechRecognition',
-        },
-      },
-      source_metadata: {
-        mimeType: 'audio/webm',
-      },
-      privacy: this.privacyGuard.createPrivacyMetadata('voice', true),
-      confidence: null,
-      provenance: {
-        captureMechanism: 'browser_push_to_talk_speech_to_text',
-        pipelineVersion: 'Phase 3.0',
-      },
-    };
-
-    this.sessionContexts.set(contextId, context);
+  public processVoice(
+    req: VoiceTranscriptionRequest,
+    requestId?: string
+  ): NexusContextObject {
+    const context = this.voiceSource.process(req, { requestId });
+    this.sessionContexts.set(context.context_id, context);
     return context;
   }
 
@@ -256,115 +117,27 @@ export class PerceptionManager {
     filePath: string,
     filename: string,
     sizeBytes: number,
-    mimeType?: string
+    mimeType?: string,
+    requestId?: string
   ): Promise<NexusContextObject> {
-    const contextId = `ctx-doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const validation = this.privacyGuard.validateDocumentFile(filename, sizeBytes, mimeType);
-    if (!validation.valid) {
-      throw new Error(validation.reason);
-    }
-
-    const parseResult = await DocumentExtractor.extract(filePath, filename, mimeType);
-
-    const context: NexusContextObject = {
-      context_id: contextId,
-      timestamp: new Date().toISOString(),
-      source: 'document',
-      modality: 'document',
-      content_type: mimeType || 'application/octet-stream',
-      content: {
-        text: parseResult.text,
-        filename,
-        fileSize: sizeBytes,
-      },
-      extracted_information: parseResult.extractedInfo,
-      source_metadata: {
-        mimeType,
-      },
-      privacy: this.privacyGuard.createPrivacyMetadata('document', true),
-      confidence: null,
-      provenance: {
-        captureMechanism: 'local_file_upload_parser',
-        pipelineVersion: 'Phase 3.0',
-      },
-    };
-
-    this.sessionContexts.set(contextId, context);
+    const context = await this.documentSource.process(
+      { filePath, filename, sizeBytes, mimeType },
+      { requestId }
+    );
+    this.sessionContexts.set(context.context_id, context);
     return context;
   }
 
   // MULTIMODAL CONTEXT MERGING
   public mergeContexts(contextIds: string[], primaryQuery?: string): UnifiedMultimodalContext {
-    const unifiedId = `unified-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const contexts: NexusContextObject[] = [];
-    const activeModalities = new Set<PerceptionModality>();
-
     for (const id of contextIds) {
       const ctx = this.sessionContexts.get(id);
       if (ctx) {
         contexts.push(ctx);
-        activeModalities.add(ctx.source);
       }
     }
-
-    // Combine textual contents into a clean merged text representation
-    const textParts: string[] = [];
-    const errors: string[] = [];
-    const code: string[] = [];
-    const docSummaries: string[] = [];
-    const intentHints: string[] = [];
-
-    if (primaryQuery && primaryQuery.trim()) {
-      textParts.push(`User Query: "${primaryQuery.trim()}"`);
-    }
-
-    for (const ctx of contexts) {
-      if (ctx.source === 'text' && ctx.content.text) {
-        if (!primaryQuery || ctx.content.text !== primaryQuery) {
-          textParts.push(`Context (Text): ${ctx.content.text}`);
-        }
-      } else if (ctx.source === 'voice' && ctx.content.text) {
-        textParts.push(`Voice Input: "${ctx.content.text}"`);
-        intentHints.push('spoken_prompt');
-      } else if (ctx.source === 'screen') {
-        textParts.push(`Screen Frame: Resolution ${ctx.source_metadata.resolution || '1920x1080'}. OCR text: ${ctx.extracted_information.textSnippet || 'None'}`);
-        intentHints.push('visual_workspace');
-      } else if (ctx.source === 'camera') {
-        textParts.push(`Camera Snapshot: Resolution ${ctx.source_metadata.resolution || '640x480'}`);
-        intentHints.push('camera_input');
-      } else if (ctx.source === 'document') {
-        const fullDocText = ctx.content.text || ctx.extracted_information.textSnippet || '';
-        // Include up to 20,000 characters for rich document reasoning
-        const safeDocText = fullDocText.length > 20000 
-          ? `${fullDocText.slice(0, 20000)}\n[... Document truncated for context boundary ...]` 
-          : fullDocText;
-        textParts.push(`Attached Document (${ctx.content.filename}, ${ctx.extracted_information.wordCount || 0} words):\n${safeDocText}`);
-        docSummaries.push(`${ctx.content.filename} (${ctx.extracted_information.wordCount || 0} words)`);
-      }
-
-      if (ctx.extracted_information.errorsDetected) {
-        errors.push(...ctx.extracted_information.errorsDetected);
-      }
-    }
-
-    return {
-      unified_context_id: unifiedId,
-      created_at: new Date().toISOString(),
-      primary_query: primaryQuery || (contexts[0]?.content.text || ''),
-      active_modalities: Array.from(activeModalities),
-      contexts,
-      merged_text_representation: textParts.join('\n\n'),
-      extracted_signals: {
-        errors,
-        code,
-        document_summaries: docSummaries,
-        intent_hints: intentHints,
-      },
-      privacy_summary: {
-        all_local: true,
-        raw_media_purged: true,
-      },
-    };
+    return PerceptionContextEngine.merge(contexts, primaryQuery);
   }
 
   public getContext(contextId: string): NexusContextObject | undefined {

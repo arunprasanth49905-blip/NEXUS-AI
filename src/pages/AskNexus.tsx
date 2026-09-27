@@ -22,6 +22,7 @@ import { Button } from '../components/ui/Button';
 import { CameraModal } from '../components/ui/CameraModal';
 import { ContextPreviewBar } from '../components/ui/ContextPreviewBar';
 import { ContextPanel } from '../components/ui/ContextPanel';
+import { PerceptionWorkspaceBar, type ModalityUXState } from '../components/ui/PerceptionWorkspaceBar';
 import { PlanExecutionCard } from '../components/ui/PlanExecutionCard';
 import type { ChatMessage, ContextInfo, NexusContextObject } from '../types';
 import type { OrchestrationTask, TaskPlan, OrchestrationResult } from '../types/agent';
@@ -57,6 +58,9 @@ export const AskNexus: React.FC<AskNexusProps> = ({
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [voiceState, setVoiceState] = useState<ModalityUXState>('OFF');
+  const [screenState, setScreenState] = useState<ModalityUXState>('OFF');
+  const [cameraState, setCameraState] = useState<ModalityUXState>('OFF');
   const speechRecognitionRef = useRef<any>(null);
 
   // Phase 4 Context & Memory State
@@ -377,14 +381,22 @@ export const AskNexus: React.FC<AskNexusProps> = ({
 
   // --- Multimodal Action Handlers ---
   const handleTriggerScreenCapture = async () => {
+    setScreenState('REQUESTING');
     try {
       setIsScreenSharing(true);
       onAddToast('Screen Capture', 'Requesting window or display selection...', 'info');
       const ctx = await PerceptionService.captureScreen();
       setAttachedContexts((prev) => [...prev, ctx]);
+      setScreenState('ACTIVE');
+      setTimeout(() => setScreenState('STOPPED'), 2000);
       onAddToast('Screen Attached', 'Single frame captured and attached to prompt context.', 'success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Screen capture aborted';
+      if (msg.includes('denied') || msg.includes('NotAllowedError')) {
+        setScreenState('DENIED');
+      } else {
+        setScreenState('ERROR');
+      }
       onAddToast('Screen Capture Notice', msg, 'warning');
     } finally {
       setIsScreenSharing(false);
@@ -392,6 +404,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
   };
 
   const handleTriggerCamera = () => {
+    setCameraState('REQUESTING');
     setIsCameraModalOpen(true);
   };
 
@@ -418,16 +431,19 @@ export const AskNexus: React.FC<AskNexusProps> = ({
         speechRecognitionRef.current.stop();
       }
       setIsListening(false);
+      setVoiceState('STOPPED');
       return;
     }
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = typeof window !== 'undefined' ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : undefined;
     if (!SpeechRecognition) {
+      setVoiceState('UNAVAILABLE');
       onAddToast('Voice Unavailable', 'Browser native speech recognition is not supported in this browser.', 'warning');
       return;
     }
 
     try {
+      setVoiceState('REQUESTING');
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
@@ -435,6 +451,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
 
       recognition.onstart = () => {
         setIsListening(true);
+        setVoiceState('ACTIVE');
         onAddToast('Listening...', 'Speak your question clearly.', 'info');
       };
 
@@ -454,17 +471,24 @@ export const AskNexus: React.FC<AskNexusProps> = ({
 
       recognition.onerror = (event: any) => {
         setIsListening(false);
+        if (event.error === 'not-allowed') {
+          setVoiceState('DENIED');
+        } else {
+          setVoiceState('ERROR');
+        }
         onAddToast('Voice Error', `Speech recognition error: ${event.error}`, 'warning');
       };
 
       recognition.onend = () => {
         setIsListening(false);
+        setVoiceState('STOPPED');
       };
 
       speechRecognitionRef.current = recognition;
       recognition.start();
     } catch (err: unknown) {
       setIsListening(false);
+      setVoiceState('ERROR');
       const msg = err instanceof Error ? err.message : 'Microphone access failed';
       onAddToast('Microphone Error', msg, 'error');
     }
@@ -734,13 +758,29 @@ export const AskNexus: React.FC<AskNexusProps> = ({
       {/* Camera Capture Modal */}
       <CameraModal
         isOpen={isCameraModalOpen}
-        onClose={() => setIsCameraModalOpen(false)}
-        onCaptureSuccess={(ctx) => setAttachedContexts((prev) => [...prev, ctx])}
+        onClose={() => {
+          setIsCameraModalOpen(false);
+          setCameraState('STOPPED');
+        }}
+        onCaptureSuccess={(ctx) => {
+          setAttachedContexts((prev) => [...prev, ctx]);
+          setCameraState('ACTIVE');
+          setTimeout(() => setCameraState('STOPPED'), 2000);
+        }}
         onAddToast={onAddToast}
       />
 
       {/* Bottom Composer */}
       <div className="nexus-ask-composer-container">
+        {/* Phase 3 Active Inputs & Perception Context Bar */}
+        <PerceptionWorkspaceBar
+          voiceState={voiceState}
+          screenState={screenState}
+          cameraState={cameraState}
+          documentCount={attachedContexts.filter((c) => c.source === 'document').length}
+          activeContext={attachedContexts.length > 0 ? attachedContexts[attachedContexts.length - 1] : null}
+        />
+
         {/* Attached Context Preview Bar */}
         <ContextPreviewBar
           contexts={attachedContexts}
