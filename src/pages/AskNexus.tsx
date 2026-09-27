@@ -148,13 +148,13 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     setIsLoading(true);
 
     try {
-      // 1. Check if user request is a multi-step workflow or requests a plan
+      // 1. Check if user request explicitly asks for a multi-step decomposed workflow (and not a direct conversational/document query)
       const lower = text.toLowerCase();
-      const isMultiStepGoal = (lower.includes('analyze') && lower.includes('identify') && lower.includes('create')) ||
-        lower.startsWith('create a plan') ||
-        lower.includes('technical gaps') ||
-        lower.includes('presentation structure') ||
-        lower.includes('plan for');
+      const isMultiStepGoal = currentContextIds.length === 0 && (
+        (lower.includes('analyze') && lower.includes('identify') && lower.includes('technical gaps') && lower.includes('create')) ||
+        lower.startsWith('create a multi-step plan for') ||
+        lower.startsWith('decompose workflow')
+      );
 
       if (isMultiStepGoal) {
         try {
@@ -199,7 +199,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
         role: 'assistant',
         content: result.response,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        executionMode: result.execution_mode || 'Hardware-Aware (CPU)',
+        executionMode: result.execution_mode || (result.provider === 'gemini' ? 'Gemini 3.8 Flash · Cloud' : 'Local Engine'),
         provider: result.provider,
         latencyMs: result.latency_ms,
         fallbackUsed: result.fallback_used,
@@ -211,18 +211,13 @@ export const AskNexus: React.FC<AskNexusProps> = ({
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch {
-      // Graceful truthful Phase 4 response when running in standalone mode
+      // Graceful clean message if backend is unreachable
       const assistantMessage: ChatMessage = {
         id: `msg-nexus-${Date.now()}`,
         role: 'assistant',
-        content: (
-          `NEXUS EDGE received query: "${text}".\n\n` +
-          `[Phase 4 Context Intelligence & Memory Active]\n` +
-          `Local hardware-aware engine is active in standalone CPU mode.\n\n` +
-          `Active Context: ${context.project} | Privacy: ${context.privacy} (Local perimeter).`
-        ),
+        content: "NEXUS couldn't reach the configured AI provider. Please verify backend connection and environment configuration.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        executionMode: 'Local Standalone Engine (CPU)',
+        executionMode: 'Offline / Standalone',
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -541,18 +536,11 @@ export const AskNexus: React.FC<AskNexusProps> = ({
 
                   <div className="nexus-message-content-box">
                     <div className="nexus-message-meta">
-                      <span className="nexus-msg-author">{isUser ? 'You' : 'NEXUS EDGE'}</span>
-                      {msg.executionMode && (
-                        <span className="nexus-msg-mode-tag">{msg.executionMode}</span>
-                      )}
-                      {msg.latencyMs !== undefined && (
-                        <span className="nexus-msg-mode-tag text-cyan">{msg.latencyMs} ms</span>
-                      )}
-                      {msg.multimodalContext && (
-                        <span className="nexus-msg-mode-tag text-purple">{msg.multimodalContext}</span>
-                      )}
-                      {msg.contextUnderstanding?.active_task && (
-                        <span className="nexus-msg-mode-tag text-amber">Goal: {msg.contextUnderstanding.active_task}</span>
+                      <span className="nexus-msg-author">{isUser ? 'You' : 'NEXUS'}</span>
+                      {!isUser && (
+                        <span className="nexus-msg-mode-tag">
+                          {msg.provider === 'gemini' ? 'Gemini 3.8 Flash · Cloud' : (msg.executionMode || 'NEXUS Engine')}
+                        </span>
                       )}
                       <span className="nexus-msg-time">{msg.timestamp}</span>
                     </div>

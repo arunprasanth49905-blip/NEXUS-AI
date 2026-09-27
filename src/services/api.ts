@@ -125,6 +125,17 @@ class ApiService {
     });
   }
 
+  public async getAssistantStatus(): Promise<{
+    provider: string;
+    model: string;
+    configured: boolean;
+    available: boolean;
+    execution_mode: string;
+    reason?: string;
+  }> {
+    return this.request('/assistant/status');
+  }
+
   // --- Phase 2 Runtime Endpoints ---
   public async getRuntimeStatus(): Promise<RuntimeStatusResponse> {
     return this.request<RuntimeStatusResponse>('/runtime/status');

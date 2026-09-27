@@ -326,10 +326,20 @@ export const Settings: React.FC<SettingsProps> = ({
 
                 <div className="nexus-setting-row">
                   <div className="nexus-setting-info">
-                    <span className="nexus-setting-title">AI Engine Pipeline</span>
-                    <span className="nexus-setting-desc">Phase 1 provides the interaction UX and system shell.</span>
+                    <span className="nexus-setting-title">Conversational AI Provider</span>
+                    <span className="nexus-setting-desc">Primary conversational reasoning provider. Configured via backend environment.</span>
                   </div>
-                  <span className="nexus-badge-tag">Phase 2 Target: Local Edge Model</span>
+                  <span className="nexus-badge-tag text-cyan">Google Gemini (gemini-3.8-flash)</span>
+                </div>
+
+                <div className="nexus-setting-divider" />
+
+                <div className="nexus-setting-row">
+                  <div className="nexus-setting-info">
+                    <span className="nexus-setting-title">Local Hardware Runtime</span>
+                    <span className="nexus-setting-desc">Hardware-aware execution layer for local intent, perception, memory, and diagnostics.</span>
+                  </div>
+                  <span className="nexus-badge-tag">CPU / Snapdragon QNN</span>
                 </div>
               </Card>
             </div>

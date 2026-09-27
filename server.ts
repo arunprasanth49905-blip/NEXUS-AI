@@ -12,6 +12,8 @@ import { ToolExecutionEngine } from './server/tools/executor.js';
 import { FilesystemSandbox } from './server/tools/sandbox.js';
 import { ActionAuditLogger } from './server/tools/audit.js';
 import { AdaptiveEngine } from './server/adaptation/index.js';
+import { assistantManager } from './server/assistant/assistant-manager.js';
+import type { AssistantDocumentContext } from './server/assistant/types.js';
 import type { ProviderId } from './src/types/runtime.js';
 import type { ScreenCaptureRequest, CameraCaptureRequest, VoiceTranscriptionRequest } from './src/types/perception.js';
 import type { MemoryType } from './src/types/context_memory.js';
@@ -1183,22 +1185,59 @@ app.post('/api/v1/assistant/query', async (req, res) => {
       formattedPrompt += `\n\n[USER PREFERENCES & ADAPTATION]\n${prefSnippets.join('\n')}`;
     }
 
-    // 4. Pass Context Window to Phase 2 Hardware-Aware AI Runtime
-    const inferenceResult = await runtimeManager.infer({
-      input: formattedPrompt,
-      requestedProvider: 'auto',
+    // 4. Retrieve any attached documents from Perception Manager
+    const attachedDocs: AssistantDocumentContext[] = [];
+    for (const cid of contextIds) {
+      const ctx = perceptionManager.getContext(cid);
+      if (ctx && ctx.source === 'document') {
+        attachedDocs.push({
+          filename: ctx.content.filename || 'document',
+          content: ctx.content.text || ctx.extracted_information?.textSnippet || '',
+          mimeType: ctx.content_type,
+          wordCount: ctx.extracted_information?.wordCount,
+        });
+      }
+    }
+
+    // 5. Delegate to Assistant Provider (Gemini / Local / Auto)
+    const assistantResult = await assistantManager.generateResponse({
+      userMessage: message || primaryInputText,
+      context: contextIds.length > 0 ? primaryInputText : undefined,
+      documents: attachedDocs,
+      memories: canonicalContext.relevant_memories.map((m) => ({
+        memory_id: m.memory_id,
+        memory_type: m.memory_type,
+        content: m.content,
+      })),
+      preferences: personalization.applied_preferences.map((p) => ({
+        key: p.key,
+        value: p.value,
+        category: p.category,
+        scope: p.scope,
+      })),
+      task: contextWindow.active_task
+        ? {
+            task_id: contextWindow.active_task.task_id,
+            title: contextWindow.active_task.title,
+            description: contextWindow.active_task.description,
+            status: contextWindow.active_task.status,
+          }
+        : undefined,
+      multimodalSummary,
     });
 
     res.json({
-      response: inferenceResult.result.text,
+      response: assistantResult.text,
       status: 'success',
       phase: PHASE,
-      execution_mode: `Hardware-Aware (${inferenceResult.provider.toUpperCase()})`,
-      provider: inferenceResult.provider,
-      latency_ms: inferenceResult.latency_ms,
-      fallback_used: inferenceResult.fallback_used,
-      fallback_reason: inferenceResult.fallback_reason,
+      execution_mode: assistantResult.provenance?.executionMode || 'Cloud API',
+      provider: assistantResult.provider,
+      model: assistantResult.model,
+      latency_ms: assistantResult.latency_ms,
+      fallback_used: assistantResult.provider === 'local' && assistantManager.configuredProviderName === 'auto',
+      fallback_reason: assistantResult.warnings.length > 0 ? assistantResult.warnings.join('; ') : null,
       multimodal_context: multimodalSummary,
+      grounded_context: assistantResult.grounded_context,
       personalization: {
         applied: personalization.applied_preferences.length > 0,
         explanation: personalization.explanation,
@@ -1227,6 +1266,11 @@ app.post('/api/v1/assistant/query', async (req, res) => {
   }
 });
 
+// Assistant status endpoint
+app.get('/api/v1/assistant/status', (_req, res) => {
+  res.json(assistantManager.getStatus());
+});
+
 // Root API info endpoint
 app.get('/api/info', async (_req, res) => {
   res.json({
@@ -1235,6 +1279,7 @@ app.get('/api/info', async (_req, res) => {
     phase: PHASE,
     version: VERSION,
     status: 'online',
+    assistant: assistantManager.getStatus(),
     runtime: runtimeManager.getRuntimeStatus(),
     perception: perceptionManager.getStatus(),
     context_memory: await contextMemoryEngine.getStatus(),

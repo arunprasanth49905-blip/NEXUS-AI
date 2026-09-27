@@ -20,7 +20,8 @@ import {
   Brain,
   Database,
   Bot,
-  Wrench
+  Wrench,
+  Sparkles
 } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -87,6 +88,21 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
   const [orchestrator, setOrchestrator] = useState<OrchestratorStatusReport | null>(null);
   const [toolsStatus, setToolsStatus] = useState<ToolEngineStatusReport | null>(null);
   const [adaptiveStatus, setAdaptiveStatus] = useState<AdaptiveEngineStatusReport | null>(null);
+  const [assistantStatus, setAssistantStatus] = useState<{
+    provider: string;
+    model: string;
+    configured: boolean;
+    available: boolean;
+    execution_mode: string;
+    reason?: string;
+  }>({
+    provider: 'gemini',
+    model: 'gemini-3.8-flash',
+    configured: false,
+    available: false,
+    execution_mode: 'Cloud API',
+    reason: 'Detecting assistant status...',
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -134,6 +150,13 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
       try {
         const aRes = await getLearningStatus();
         setAdaptiveStatus(aRes);
+      } catch {
+        // Fallback default
+      }
+
+      try {
+        const astRes = await api.getAssistantStatus();
+        setAssistantStatus(astRes);
       } catch {
         // Fallback default
       }
@@ -240,6 +263,46 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
 
       {/* Main Diagnostics Grid */}
       <div className="nexus-diag-grid">
+        {/* Section 0: AI PROVIDER */}
+        <Card variant="elevated" padding="md" className="nexus-diag-card" style={{ borderColor: 'rgba(56, 189, 248, 0.3)' }}>
+          <div className="nexus-diag-card-header">
+            <div className="nexus-diag-card-title-wrap">
+              <Sparkles size={18} className="text-cyan" />
+              <h2 className="nexus-diag-card-title">AI PROVIDER</h2>
+            </div>
+            <StatusBadge status={assistantStatus.configured ? 'ready' : 'offline'} />
+          </div>
+
+          <div className="nexus-diag-props-list">
+            <div className="nexus-diag-prop">
+              <span className="nexus-diag-prop-key">Assistant Provider</span>
+              <span className="nexus-diag-prop-val text-cyan" style={{ fontWeight: 600 }}>
+                {assistantStatus.provider === 'gemini' ? 'Google Gemini' : assistantStatus.provider.toUpperCase()}
+              </span>
+            </div>
+            <div className="nexus-diag-prop">
+              <span className="nexus-diag-prop-key">Model</span>
+              <span className="nexus-diag-prop-val nexus-mono-val">{assistantStatus.model}</span>
+            </div>
+            <div className="nexus-diag-prop">
+              <span className="nexus-diag-prop-key">Status</span>
+              <span className={`nexus-diag-prop-val ${assistantStatus.configured ? 'text-green' : 'text-amber'}`}>
+                {assistantStatus.configured ? 'READY' : 'NOT CONFIGURED'}
+              </span>
+            </div>
+            <div className="nexus-diag-prop">
+              <span className="nexus-diag-prop-key">Execution</span>
+              <span className="nexus-diag-prop-val">{assistantStatus.execution_mode}</span>
+            </div>
+            <div className="nexus-diag-prop">
+              <span className="nexus-diag-prop-key">API Key</span>
+              <span className={`nexus-diag-prop-val ${assistantStatus.configured ? 'text-green' : 'text-amber'}`}>
+                {assistantStatus.configured ? 'Configured' : 'Not Configured (Add NEXUS_GEMINI_API_KEY)'}
+              </span>
+            </div>
+          </div>
+        </Card>
+
         {/* Section 1: SYSTEM */}
         <Card variant="default" padding="md" className="nexus-diag-card">
           <div className="nexus-diag-card-header">

@@ -68,23 +68,60 @@ export class DocumentExtractor {
     }
 
     if (ext === '.pdf') {
-      // PDF text extraction: Inspect raw PDF stream objects for text literals safely without third-party binary bloat
       const buffer = await fs.promises.readFile(filePath);
-      const rawContent = buffer.toString('latin1');
-      
-      // Look for PDF text streams (Tj, TJ, text chunks between parentheses)
       const textMatches: string[] = [];
-      const regex = /\(([^)]+)\)\s*Tj/g;
-      let match: RegExpExecArray | null;
-      while ((match = regex.exec(rawContent)) !== null) {
-        if (match[1] && match[1].trim().length > 0) {
-          textMatches.push(match[1]);
+
+      // Helper function to extract text operators from text stream
+      const extractFromStream = (str: string) => {
+        // Match (string) Tj
+        const tjRegex = /\(([^)]+)\)\s*Tj/g;
+        let m: RegExpExecArray | null;
+        while ((m = tjRegex.exec(str)) !== null) {
+          if (m[1] && m[1].trim().length > 0) {
+            textMatches.push(m[1].trim());
+          }
+        }
+        // Match [(chunk1) -10 (chunk2)] TJ
+        const tjArrRegex = /\[(.*?)\]\s*TJ/g;
+        while ((m = tjArrRegex.exec(str)) !== null) {
+          const inner = m[1];
+          const innerRegex = /\(([^)]+)\)/g;
+          let im: RegExpExecArray | null;
+          while ((im = innerRegex.exec(inner)) !== null) {
+            if (im[1] && im[1].trim().length > 0) {
+              textMatches.push(im[1].trim());
+            }
+          }
+        }
+      };
+
+      // 1. Check raw stream objects in buffer
+      const rawContent = buffer.toString('latin1');
+      extractFromStream(rawContent);
+
+      // 2. Scan and decompress any /FlateDecode streams using zlib
+      const streamStartRegex = /stream\r?\n/g;
+      let streamMatch: RegExpExecArray | null;
+      while ((streamMatch = streamStartRegex.exec(rawContent)) !== null) {
+        const startIndex = streamMatch.index + streamMatch[0].length;
+        const endIndex = rawContent.indexOf('endstream', startIndex);
+        if (endIndex > startIndex) {
+          const streamBuffer = buffer.subarray(startIndex, endIndex);
+          try {
+            // Attempt decompression with zlib (built-in)
+            const zlib = await import('zlib');
+            const decompressed = zlib.inflateSync(streamBuffer);
+            const decompressedStr = decompressed.toString('utf-8');
+            extractFromStream(decompressedStr);
+          } catch {
+            // Not a flate stream or uncompressed; continue
+          }
         }
       }
 
       const extractedText = textMatches.length > 0 
         ? textMatches.join(' ') 
-        : `[PDF Structure Parsed: ${filename} (${(size / 1024).toFixed(1)} KB)]`;
+        : `[PDF Document: ${filename} (${(size / 1024).toFixed(1)} KB)]`;
 
       return {
         text: extractedText,

@@ -333,8 +333,12 @@ export class PerceptionManager {
         textParts.push(`Camera Snapshot: Resolution ${ctx.source_metadata.resolution || '640x480'}`);
         intentHints.push('camera_input');
       } else if (ctx.source === 'document') {
-        const snippet = ctx.extracted_information.textSnippet || ctx.content.text?.slice(0, 200) || '';
-        textParts.push(`Document (${ctx.content.filename}): ${snippet}`);
+        const fullDocText = ctx.content.text || ctx.extracted_information.textSnippet || '';
+        // Include up to 20,000 characters for rich document reasoning
+        const safeDocText = fullDocText.length > 20000 
+          ? `${fullDocText.slice(0, 20000)}\n[... Document truncated for context boundary ...]` 
+          : fullDocText;
+        textParts.push(`Attached Document (${ctx.content.filename}, ${ctx.extracted_information.wordCount || 0} words):\n${safeDocText}`);
         docSummaries.push(`${ctx.content.filename} (${ctx.extracted_information.wordCount || 0} words)`);
       }
 
