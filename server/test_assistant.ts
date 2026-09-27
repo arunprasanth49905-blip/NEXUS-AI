@@ -2,7 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { AssistantManager } from './assistant/assistant-manager.js';
 import { AssistantProviderRegistry } from './assistant/provider-registry.js';
-import { GeminiAssistantProvider } from './assistant/providers/gemini.js';
+import {
+  GeminiAssistantProvider,
+  classifyGeminiError,
+  sanitizeGeminiLog,
+} from './assistant/providers/gemini.js';
 import { LocalAssistantProvider } from './assistant/providers/local.js';
 import type {
   AssistantProvider,
@@ -17,6 +21,7 @@ class MockGeminiProvider implements AssistantProvider {
   public readonly name = 'Google Gemini (Mock)';
   public readonly model = 'gemini-3.8-flash';
   public shouldFail = false;
+  public failureType?: 'auth' | 'model' | 'timeout' | 'network';
   public lastReceivedParams?: AssistantGenerateParams;
 
   public isConfigured(): boolean {
@@ -32,6 +37,7 @@ class MockGeminiProvider implements AssistantProvider {
       provider: 'gemini',
       model: this.model,
       configured: true,
+      status: this.shouldFail ? 'ERROR' : 'READY',
       available: !this.shouldFail,
       execution_mode: 'Cloud API (Mock)',
       reason: this.shouldFail ? 'Simulated failure' : 'Ready',
@@ -41,12 +47,23 @@ class MockGeminiProvider implements AssistantProvider {
   public async generateResponse(params: AssistantGenerateParams): Promise<AssistantResponse> {
     this.lastReceivedParams = params;
     if (this.shouldFail) {
+      const category =
+        this.failureType === 'auth'
+          ? 'permission/authentication failure'
+          : this.failureType === 'model'
+          ? 'model not found'
+          : this.failureType === 'timeout'
+          ? 'timeout'
+          : this.failureType === 'network'
+          ? 'network failure'
+          : 'unknown error';
+
       return {
         text: "NEXUS couldn't reach the configured AI provider. Please try again.",
         provider: 'gemini',
         model: this.model,
         latency_ms: 10,
-        warnings: ['Mock failure triggered'],
+        warnings: [category, `Mock failure triggered: ${category}`],
         provenance: {
           timestamp: new Date().toISOString(),
           executionMode: 'Cloud API (Error)',
@@ -118,11 +135,17 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
     try {
       const provider = new GeminiAssistantProvider();
       assert.strictEqual(provider.isConfigured(), false);
+      const status = provider.getStatus();
+      assert.strictEqual(status.status, 'NOT_CONFIGURED');
+      assert.strictEqual(status.configured, false);
+      assert.strictEqual(status.available, false);
+
       const res = await provider.generateResponse({ userMessage: 'hello' });
       assert.strictEqual(
         res.text,
         'Gemini is not configured. Add NEXUS_GEMINI_API_KEY to the backend environment.'
       );
+      assert.ok(res.warnings.includes('missing API key'));
     } finally {
       if (originalKey) process.env.NEXUS_GEMINI_API_KEY = originalKey;
     }
@@ -309,6 +332,7 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
     const local = new LocalAssistantProvider();
     assert.strictEqual(local.id, 'local');
     assert.strictEqual(local.getStatus().execution_mode, 'Local CPU (Deterministic)');
+    assert.strictEqual(local.getStatus().status, 'READY');
 
     const res = await local.generateResponse({ userMessage: 'hello' });
     assert.ok(res.text.includes('conversational provider (Gemini) is currently not configured'));
@@ -323,6 +347,7 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
     assert.ok(status.provider);
     assert.ok(status.model);
     assert.strictEqual(typeof status.configured, 'boolean');
+    assert.ok(['READY', 'NOT_CONFIGURED', 'INVALID_CONFIGURATION', 'UNAVAILABLE', 'ERROR'].includes(status.status));
     assert.strictEqual(typeof status.available, 'boolean');
     assert.ok(status.execution_mode);
     assert.strictEqual((status as any).apiKey, undefined);
@@ -335,9 +360,86 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
     const manager = new AssistantManager(registry);
     const status = manager.getStatus();
 
-    // Assistant provider is Cloud API
     assert.strictEqual(status.execution_mode, 'Cloud API');
-    // Does not claim local Snapdragon NPU for Gemini
     assert.ok(!status.execution_mode.toLowerCase().includes('npu'));
+  });
+
+  // Test 16: Gemini Error Classification (Auth, Model, Quota, Network, Timeout)
+  it('16. accurately classifies Gemini API errors', () => {
+    assert.strictEqual(
+      classifyGeminiError(new Error('API_KEY_INVALID: API key not valid.')),
+      'invalid API key'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('PERMISSION_DENIED: User not authenticated')),
+      'permission/authentication failure'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('models/gemini-3.8-flash is not found 404')),
+      'model not found'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('RESOURCE_EXHAUSTED: Rate limit exceeded (429)')),
+      'quota/rate limit'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('fetch failed: connect ETIMEDOUT 172.217.112.4:443')),
+      'network failure'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('Request aborted due to timeout: AbortError')),
+      'timeout'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('INVALID_ARGUMENT: malformed request')),
+      'malformed request'
+    );
+  });
+
+  // Test 17: Log Sanitizer Never Leaks API Keys or Authorization Headers
+  it('17. log sanitizer strips raw Gemini API keys and auth headers', () => {
+    const rawError = 'Failed to fetch from https://generativelanguage.googleapis.com/v1beta?key=AIzaSyD9x7a28K19aB81xLk29Zp10Q71hJa201k with Authorization: Bearer secret-token-xyz';
+    const sanitized = sanitizeGeminiLog(rawError);
+
+    assert.ok(!sanitized.includes('AIzaSyD9x7a28K19aB81xLk29Zp10Q71hJa201k'));
+    assert.ok(!sanitized.includes('secret-token-xyz'));
+    assert.ok(sanitized.includes('[REDACTED_SECRET]'));
+  });
+
+  // Test 18: Placeholder or Invalid Configuration Detection
+  it('18. identifies placeholder API key as INVALID_CONFIGURATION', () => {
+    const originalKey = process.env.NEXUS_GEMINI_API_KEY;
+    try {
+      process.env.NEXUS_GEMINI_API_KEY = '<YOUR_API_KEY>';
+      const provider = new GeminiAssistantProvider();
+      assert.strictEqual(provider.isConfigured(), false);
+      const status = provider.getStatus();
+      assert.strictEqual(status.status, 'INVALID_CONFIGURATION');
+      assert.strictEqual(status.configured, false);
+      assert.strictEqual(status.available, false);
+    } finally {
+      if (originalKey) {
+        process.env.NEXUS_GEMINI_API_KEY = originalKey;
+      } else {
+        delete process.env.NEXUS_GEMINI_API_KEY;
+      }
+    }
+  });
+
+  // Test 19: Configurable Model via NEXUS_ASSISTANT_MODEL
+  it('19. respects NEXUS_ASSISTANT_MODEL environment variable', () => {
+    const originalModel = process.env.NEXUS_ASSISTANT_MODEL;
+    try {
+      process.env.NEXUS_ASSISTANT_MODEL = 'gemini-1.5-pro';
+      const provider = new GeminiAssistantProvider();
+      assert.strictEqual(provider.model, 'gemini-1.5-pro');
+      assert.strictEqual(provider.getStatus().model, 'gemini-1.5-pro');
+    } finally {
+      if (originalModel) {
+        process.env.NEXUS_ASSISTANT_MODEL = originalModel;
+      } else {
+        delete process.env.NEXUS_ASSISTANT_MODEL;
+      }
+    }
   });
 });

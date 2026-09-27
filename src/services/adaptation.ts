@@ -10,8 +10,9 @@ import type {
   AdaptiveEngineStatusReport,
   PersonalizationRecommendation,
 } from '../types/adaptation.js';
+import { getApiBaseUrl } from './api';
 
-const API_BASE = '/api/v1';
+const API_BASE = getApiBaseUrl();
 
 export async function getPreferences(params?: {
   scope?: string;

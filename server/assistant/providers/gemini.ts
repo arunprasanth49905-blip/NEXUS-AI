@@ -6,9 +6,85 @@ import type {
   AssistantResponse,
 } from '../types.js';
 
+export function classifyGeminiError(err: unknown): string {
+  if (!err) return 'unknown error';
+  const rawMsg = err instanceof Error ? err.message : String(err);
+  const lower = rawMsg.toLowerCase();
+
+  if (
+    lower.includes('api key not valid') ||
+    lower.includes('api_key_invalid') ||
+    lower.includes('invalid api key')
+  ) {
+    return 'invalid API key';
+  }
+  if (
+    lower.includes('permission_denied') ||
+    lower.includes('unauthenticated') ||
+    lower.includes('401') ||
+    lower.includes('403') ||
+    lower.includes('forbidden') ||
+    lower.includes('permission denied')
+  ) {
+    return 'permission/authentication failure';
+  }
+  if (
+    lower.includes('model not found') ||
+    lower.includes('not_found') ||
+    (lower.includes('404') && (lower.includes('model') || lower.includes('models/')))
+  ) {
+    return 'model not found';
+  }
+  if (
+    lower.includes('resource_exhausted') ||
+    lower.includes('429') ||
+    lower.includes('quota') ||
+    lower.includes('rate limit')
+  ) {
+    return 'quota/rate limit';
+  }
+  if (
+    lower.includes('timeout') ||
+    lower.includes('timed out') ||
+    lower.includes('aborterror') ||
+    lower.includes('deadline exceeded')
+  ) {
+    return 'timeout';
+  }
+  if (
+    lower.includes('fetch failed') ||
+    lower.includes('enotfound') ||
+    lower.includes('econnrefused') ||
+    lower.includes('etimedout') ||
+    lower.includes('socket hang up') ||
+    lower.includes('network')
+  ) {
+    return 'network failure';
+  }
+  if (
+    lower.includes('invalid_argument') ||
+    lower.includes('malformed') ||
+    lower.includes('bad request') ||
+    lower.includes('400')
+  ) {
+    return 'malformed request';
+  }
+  if (lower.includes('genai') || lower.includes('google') || lower.includes('sdk')) {
+    return 'SDK/API error';
+  }
+  return 'unknown error';
+}
+
+export function sanitizeGeminiLog(text: string): string {
+  return text
+    .replace(/(?:AIzaSy[a-zA-Z0-9_-]{33}|key=[^&\s]+|Bearer\s+[a-zA-Z0-9._-]+)/gi, '[REDACTED_SECRET]')
+    .replace(/(?:x-goog-api-key|authorization):\s*[^\s,]+/gi, '$1: [REDACTED_SECRET]');
+}
+
 export class GeminiAssistantProvider implements AssistantProvider {
   public readonly id = 'gemini';
   public readonly name = 'Google Gemini';
+  public lastErrorCategory?: string;
 
   public get model(): string {
     return process.env.NEXUS_ASSISTANT_MODEL || 'gemini-3.8-flash';
@@ -20,22 +96,102 @@ export class GeminiAssistantProvider implements AssistantProvider {
   }
 
   public isConfigured(): boolean {
-    return Boolean(this.apiKey);
+    const key = this.apiKey;
+    if (!key) return false;
+    if (
+      key.length < 10 ||
+      key.includes('<') ||
+      key.toLowerCase().includes('placeholder') ||
+      key.toLowerCase().includes('your_api_key')
+    ) {
+      return false;
+    }
+    return true;
   }
 
   public isAvailable(): boolean {
-    return this.isConfigured();
+    return this.isConfigured() && this.lastErrorCategory !== 'permission/authentication failure' && this.lastErrorCategory !== 'invalid API key';
   }
 
   public getStatus(): AssistantProviderStatus {
-    const configured = this.isConfigured();
+    const key = this.apiKey;
+    if (!key) {
+      return {
+        provider: 'gemini',
+        model: this.model,
+        configured: false,
+        status: 'NOT_CONFIGURED',
+        available: false,
+        execution_mode: 'Cloud API',
+        reason: 'NEXUS_GEMINI_API_KEY is not set.',
+      };
+    }
+
+    if (
+      key.length < 10 ||
+      key.includes('<') ||
+      key.toLowerCase().includes('placeholder') ||
+      key.toLowerCase().includes('your_api_key')
+    ) {
+      return {
+        provider: 'gemini',
+        model: this.model,
+        configured: false,
+        status: 'INVALID_CONFIGURATION',
+        available: false,
+        execution_mode: 'Cloud API',
+        reason: 'NEXUS_GEMINI_API_KEY appears invalid or is a placeholder.',
+      };
+    }
+
+    if (this.lastErrorCategory) {
+      if (
+        this.lastErrorCategory === 'permission/authentication failure' ||
+        this.lastErrorCategory === 'invalid API key'
+      ) {
+        return {
+          provider: 'gemini',
+          model: this.model,
+          configured: true,
+          status: 'INVALID_CONFIGURATION',
+          available: false,
+          execution_mode: 'Cloud API',
+          reason: `Gemini authentication rejected (${this.lastErrorCategory}).`,
+          error_category: this.lastErrorCategory,
+        };
+      }
+      if (this.lastErrorCategory === 'network failure' || this.lastErrorCategory === 'timeout') {
+        return {
+          provider: 'gemini',
+          model: this.model,
+          configured: true,
+          status: 'UNAVAILABLE',
+          available: false,
+          execution_mode: 'Cloud API',
+          reason: `Gemini service connection issue (${this.lastErrorCategory}).`,
+          error_category: this.lastErrorCategory,
+        };
+      }
+      return {
+        provider: 'gemini',
+        model: this.model,
+        configured: true,
+        status: 'ERROR',
+        available: false,
+        execution_mode: 'Cloud API',
+        reason: `Gemini reported error (${this.lastErrorCategory}).`,
+        error_category: this.lastErrorCategory,
+      };
+    }
+
     return {
       provider: 'gemini',
       model: this.model,
-      configured,
-      available: configured,
+      configured: true,
+      status: 'READY',
+      available: true,
       execution_mode: 'Cloud API',
-      reason: configured ? 'Gemini API key configured and ready.' : 'NEXUS_GEMINI_API_KEY is not set.',
+      reason: 'Gemini API key configured and ready.',
     };
   }
 
@@ -44,12 +200,15 @@ export class GeminiAssistantProvider implements AssistantProvider {
     const apiKey = this.apiKey;
 
     if (!apiKey) {
+      console.error(
+        `[GEMINI] Request failed\nprovider=gemini\nmodel=${this.model}\ncategory=missing API key\nerror=NEXUS_GEMINI_API_KEY is not set in backend environment.`
+      );
       return {
         text: 'Gemini is not configured. Add NEXUS_GEMINI_API_KEY to the backend environment.',
         provider: 'gemini',
         model: this.model,
         latency_ms: 0,
-        warnings: ['NEXUS_GEMINI_API_KEY missing.'],
+        warnings: ['missing API key', 'NEXUS_GEMINI_API_KEY missing.'],
         provenance: {
           timestamp: new Date().toISOString(),
           executionMode: 'Cloud API (Unconfigured)',
@@ -134,6 +293,7 @@ export class GeminiAssistantProvider implements AssistantProvider {
 
       const responseText = response.text || '';
       const latencyMs = Math.round(performance.now() - startTime);
+      this.lastErrorCategory = undefined;
 
       return {
         text: responseText.trim(),
@@ -151,17 +311,21 @@ export class GeminiAssistantProvider implements AssistantProvider {
     } catch (err: unknown) {
       const latencyMs = Math.round(performance.now() - startTime);
       const rawError = err instanceof Error ? err.message : String(err);
-      
-      // Sanitize log to never output any API key
-      const sanitizedLog = rawError.replace(/(?:AIzaSy[a-zA-Z0-9_-]{33}|key=[^&\s]+)/gi, '[REDACTED_KEY]');
-      console.error('[NEXUS Assistant] Gemini provider error:', sanitizedLog);
+      const category = classifyGeminiError(err);
+      this.lastErrorCategory = category;
+
+      // Sanitize log to never output any API key or authorization header
+      const sanitizedError = sanitizeGeminiLog(rawError);
+      console.error(
+        `[GEMINI] Request failed\nprovider=gemini\nmodel=${this.model}\ncategory=${category}\nerror=${sanitizedError}`
+      );
 
       return {
         text: "NEXUS couldn't reach the configured AI provider. Please try again.",
         provider: 'gemini',
         model: this.model,
         latency_ms: latencyMs,
-        warnings: ['Gemini API request failed'],
+        warnings: [category, `Gemini API request failed: ${category}`],
         provenance: {
           timestamp: new Date().toISOString(),
           executionMode: 'Cloud API (Error)',

@@ -210,12 +210,17 @@ export const AskNexus: React.FC<AskNexusProps> = ({
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-    } catch {
-      // Graceful clean message if backend is unreachable
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : '';
+      console.error('[NEXUS Frontend] Assistant query error:', err);
+      const content = errMsg && !errMsg.includes('HTTP 500')
+        ? `NEXUS couldn't reach the configured AI provider (${errMsg}). Please verify backend connection and environment configuration.`
+        : "NEXUS couldn't reach the configured AI provider. Please verify backend connection and environment configuration.";
+
       const assistantMessage: ChatMessage = {
         id: `msg-nexus-${Date.now()}`,
         role: 'assistant',
-        content: "NEXUS couldn't reach the configured AI provider. Please verify backend connection and environment configuration.",
+        content,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         executionMode: 'Offline / Standalone',
       };
@@ -224,7 +229,7 @@ export const AskNexus: React.FC<AskNexusProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [inputVal, isLoading, attachedContexts, context.project, context.privacy]);
+  }, [inputVal, isLoading, attachedContexts]);
 
   // Phase 5 Plan Execution Handlers
   const handleExecutePlan = async (taskId: string) => {

@@ -54,13 +54,22 @@ export interface AssistantResponse {
   };
 }
 
+export type AssistantStatusState =
+  | 'READY'
+  | 'NOT_CONFIGURED'
+  | 'INVALID_CONFIGURATION'
+  | 'UNAVAILABLE'
+  | 'ERROR';
+
 export interface AssistantProviderStatus {
   provider: string;
   model: string;
   configured: boolean;
+  status: AssistantStatusState;
   available: boolean;
   execution_mode: string;
   reason?: string;
+  error_category?: string;
 }
 
 export interface AssistantProvider {

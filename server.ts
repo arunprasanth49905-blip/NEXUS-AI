@@ -1134,7 +1134,7 @@ app.post('/api/v1/preferences/candidates/:id/resolve', (req, res) => {
 // ----------------------------------------------------
 // INTEGRATED MULTIMODAL + CONTEXT + RUNTIME INFERENCE
 // ----------------------------------------------------
-app.post('/api/v1/assistant/query', async (req, res) => {
+app.post(['/api/v1/assistant/query', '/assistant/query'], async (req, res) => {
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
   const contextIds: string[] = Array.isArray(req.body?.context_ids) ? req.body.context_ids : [];
 
@@ -1202,7 +1202,7 @@ app.post('/api/v1/assistant/query', async (req, res) => {
     // 5. Delegate to Assistant Provider (Gemini / Local / Auto)
     const assistantResult = await assistantManager.generateResponse({
       userMessage: message || primaryInputText,
-      context: contextIds.length > 0 ? primaryInputText : undefined,
+      context: (contextIds.length > 0 || personalization.applied_preferences.length > 0) ? formattedPrompt : undefined,
       documents: attachedDocs,
       memories: canonicalContext.relevant_memories.map((m) => ({
         memory_id: m.memory_id,
@@ -1226,16 +1226,21 @@ app.post('/api/v1/assistant/query', async (req, res) => {
       multimodalSummary,
     });
 
+    const isUnconfigured = assistantResult.warnings.includes('missing API key');
+    const isError = assistantResult.warnings.some((w) => w.includes('failed') || w.includes('error'));
+
     res.json({
       response: assistantResult.text,
-      status: 'success',
+      status: isUnconfigured ? 'warning' : (isError ? 'error' : 'success'),
       phase: PHASE,
       execution_mode: assistantResult.provenance?.executionMode || 'Cloud API',
       provider: assistantResult.provider,
       model: assistantResult.model,
+      provider_status: isUnconfigured ? 'NOT_CONFIGURED' : (isError ? 'ERROR' : 'READY'),
       latency_ms: assistantResult.latency_ms,
       fallback_used: assistantResult.provider === 'local' && assistantManager.configuredProviderName === 'auto',
       fallback_reason: assistantResult.warnings.length > 0 ? assistantResult.warnings.join('; ') : null,
+      warnings: assistantResult.warnings,
       multimodal_context: multimodalSummary,
       grounded_context: assistantResult.grounded_context,
       personalization: {
@@ -1266,8 +1271,8 @@ app.post('/api/v1/assistant/query', async (req, res) => {
   }
 });
 
-// Assistant status endpoint
-app.get('/api/v1/assistant/status', (_req, res) => {
+// Assistant status endpoint - aliased for both /api/v1/assistant/status and /assistant/status
+app.get(['/api/v1/assistant/status', '/assistant/status'], (_req, res) => {
   res.json(assistantManager.getStatus());
 });
 

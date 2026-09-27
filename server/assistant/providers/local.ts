@@ -23,6 +23,7 @@ export class LocalAssistantProvider implements AssistantProvider {
       provider: 'local',
       model: this.model,
       configured: true,
+      status: 'READY',
       available: true,
       execution_mode: 'Local CPU (Deterministic)',
       reason: 'Local hardware-aware deterministic engine is operational.',

@@ -52,9 +52,11 @@ export class AssistantManager {
       provider: active.id,
       model: active.model,
       configured: active.isConfigured(),
+      status: activeStatus.status,
       available: active.isAvailable(),
       execution_mode: activeStatus.execution_mode,
       reason: activeStatus.reason,
+      error_category: activeStatus.error_category,
     };
   }
 
@@ -68,7 +70,7 @@ export class AssistantManager {
         provider: 'gemini',
         model: this.modelName,
         latency_ms: 0,
-        warnings: ['NEXUS_GEMINI_API_KEY missing in environment'],
+        warnings: ['missing API key', 'NEXUS_GEMINI_API_KEY missing in environment'],
         provenance: {
           timestamp: new Date().toISOString(),
           executionMode: 'Cloud API (Unconfigured)',

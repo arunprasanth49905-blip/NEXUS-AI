@@ -92,13 +92,16 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
     provider: string;
     model: string;
     configured: boolean;
+    status: string;
     available: boolean;
     execution_mode: string;
     reason?: string;
+    error_category?: string;
   }>({
     provider: 'gemini',
     model: 'gemini-3.8-flash',
     configured: false,
+    status: 'NOT_CONFIGURED',
     available: false,
     execution_mode: 'Cloud API',
     reason: 'Detecting assistant status...',
@@ -286,8 +289,8 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
             </div>
             <div className="nexus-diag-prop">
               <span className="nexus-diag-prop-key">Status</span>
-              <span className={`nexus-diag-prop-val ${assistantStatus.configured ? 'text-green' : 'text-amber'}`}>
-                {assistantStatus.configured ? 'READY' : 'NOT CONFIGURED'}
+              <span className={`nexus-diag-prop-val ${assistantStatus.status === 'READY' || (assistantStatus.configured && !assistantStatus.status) ? 'text-green' : 'text-amber'}`}>
+                {assistantStatus.status || (assistantStatus.configured ? 'READY' : 'NOT_CONFIGURED')}
               </span>
             </div>
             <div className="nexus-diag-prop">

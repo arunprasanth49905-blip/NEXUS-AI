@@ -11,13 +11,14 @@ import type {
   ApprovalRequirement,
   AgentExecutionRecord,
 } from '../types';
+import { getApiBaseUrl } from './api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const API_BASE_URL = getApiBaseUrl();
 
 class AgentService {
   private baseUrl: string;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
   }
 

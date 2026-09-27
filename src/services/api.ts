@@ -28,12 +28,20 @@ import type {
   MemoryType,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+export function getApiBaseUrl(): string {
+  const rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (!rawBase) {
+    return '/api/v1';
+  }
+  return rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiService {
   private baseUrl: string;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
   }
 
@@ -99,9 +107,12 @@ class ApiService {
     phase: string;
     execution_mode: string;
     provider?: string;
+    model?: string;
+    provider_status?: string;
     latency_ms?: number;
     fallback_used?: boolean;
     fallback_reason?: string | null;
+    warnings?: string[];
     multimodal_context?: string;
     context_understanding?: {
       category?: string;
@@ -129,9 +140,11 @@ class ApiService {
     provider: string;
     model: string;
     configured: boolean;
+    status: string;
     available: boolean;
     execution_mode: string;
     reason?: string;
+    error_category?: string;
   }> {
     return this.request('/assistant/status');
   }

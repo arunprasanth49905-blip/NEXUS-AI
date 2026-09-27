@@ -8,9 +8,15 @@ import type {
   ToolEngineStatusReport,
   ActionAuditEvent,
 } from '../types/tool.js';
+import { getApiBaseUrl } from './api';
 
 export class ToolService {
   private static instance: ToolService | null = null;
+  private baseUrl: string;
+
+  constructor() {
+    this.baseUrl = getApiBaseUrl();
+  }
 
   public static getInstance(): ToolService {
     if (!ToolService.instance) {
@@ -20,31 +26,31 @@ export class ToolService {
   }
 
   public async getTools(): Promise<{ tools: ToolInfo[]; total: number; enabled: number }> {
-    const res = await fetch('/api/v1/tools');
+    const res = await fetch(`${this.baseUrl}/tools`);
     if (!res.ok) throw new Error(`Failed to fetch tools: ${res.statusText}`);
     return res.json();
   }
 
   public async getTool(toolId: string): Promise<{ tool: ToolInfo }> {
-    const res = await fetch(`/api/v1/tools/${toolId}`);
+    const res = await fetch(`${this.baseUrl}/tools/${toolId}`);
     if (!res.ok) throw new Error(`Failed to fetch tool '${toolId}': ${res.statusText}`);
     return res.json();
   }
 
   public async getCapabilities(): Promise<{ capabilities: Record<string, string[]> }> {
-    const res = await fetch('/api/v1/tools/capabilities');
+    const res = await fetch(`${this.baseUrl}/tools/capabilities`);
     if (!res.ok) throw new Error(`Failed to fetch capabilities: ${res.statusText}`);
     return res.json();
   }
 
   public async getStatus(): Promise<ToolEngineStatusReport> {
-    const res = await fetch('/api/v1/tools/status');
+    const res = await fetch(`${this.baseUrl}/tools/status`);
     if (!res.ok) throw new Error(`Failed to fetch tool engine status: ${res.statusText}`);
     return res.json();
   }
 
   public async getPolicies(): Promise<Record<string, unknown>> {
-    const res = await fetch('/api/v1/tools/policies');
+    const res = await fetch(`${this.baseUrl}/tools/policies`);
     if (!res.ok) throw new Error(`Failed to fetch tool policies: ${res.statusText}`);
     return res.json();
   }
@@ -53,7 +59,7 @@ export class ToolService {
     toolId: string,
     input: Record<string, unknown>
   ): Promise<{ valid: boolean; errors: string[] }> {
-    const res = await fetch('/api/v1/tools/validate', {
+    const res = await fetch(`${this.baseUrl}/tools/validate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool_id: toolId, input }),
@@ -70,7 +76,7 @@ export class ToolService {
     agent_id?: string;
     approval_id?: string;
   }): Promise<ToolResult> {
-    const res = await fetch('/api/v1/tools/execute', {
+    const res = await fetch(`${this.baseUrl}/tools/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -83,19 +89,19 @@ export class ToolService {
   }
 
   public async getActions(limit: number = 50): Promise<{ actions: ActionAuditEvent[]; total: number }> {
-    const res = await fetch(`/api/v1/actions?limit=${limit}`);
+    const res = await fetch(`${this.baseUrl}/actions?limit=${limit}`);
     if (!res.ok) throw new Error(`Failed to fetch actions: ${res.statusText}`);
     return res.json();
   }
 
   public async getAction(actionId: string): Promise<{ action: ActionAuditEvent }> {
-    const res = await fetch(`/api/v1/actions/${actionId}`);
+    const res = await fetch(`${this.baseUrl}/actions/${actionId}`);
     if (!res.ok) throw new Error(`Failed to fetch action '${actionId}': ${res.statusText}`);
     return res.json();
   }
 
   public async cancelExecution(executionId: string): Promise<{ success: boolean }> {
-    const res = await fetch(`/api/v1/tools/executions/${executionId}/cancel`, {
+    const res = await fetch(`${this.baseUrl}/tools/executions/${executionId}/cancel`, {
       method: 'POST',
     });
     if (!res.ok) throw new Error(`Failed to cancel execution '${executionId}': ${res.statusText}`);
