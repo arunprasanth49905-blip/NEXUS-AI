@@ -374,11 +374,11 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
   it('16. accurately classifies Gemini API errors', () => {
     assert.strictEqual(
       classifyGeminiError(new Error('API_KEY_INVALID: API key not valid.')),
-      'AUTHENTICATION_ERROR'
+      'INVALID_API_KEY'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('PERMISSION_DENIED: User not authenticated')),
-      'PERMISSION_ERROR'
+      'PERMISSION_DENIED'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('models/gemini-3.8-flash is not found 404')),
@@ -386,11 +386,11 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
     );
     assert.strictEqual(
       classifyGeminiError(new Error('RESOURCE_EXHAUSTED: Rate limit exceeded (429)')),
-      'QUOTA_ERROR'
+      'QUOTA_EXCEEDED'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('Rate limit exceeded (429)')),
-      'RATE_LIMIT'
+      'RATE_LIMITED'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('fetch failed: connect ETIMEDOUT 172.217.112.4:443')),
@@ -398,11 +398,19 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
     );
     assert.strictEqual(
       classifyGeminiError(new Error('Request aborted due to timeout: AbortError')),
-      'NETWORK_ERROR'
+      'TIMEOUT'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('INVALID_ARGUMENT: malformed request')),
       'INVALID_REQUEST'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('503 Service Unavailable')),
+      'PROVIDER_UNAVAILABLE'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('missing API key in environment')),
+      'MISSING_API_KEY'
     );
   });
 
@@ -419,20 +427,32 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
   // Test 18: Placeholder or Invalid Configuration Detection
   it('18. identifies placeholder API key as NOT_CONFIGURED / unconfigured', () => {
     const originalKey = process.env.NEXUS_GEMINI_API_KEY;
+    const originalGeminiKey = process.env.GEMINI_API_KEY;
+    const originalGoogleKey = process.env.GOOGLE_API_KEY;
     try {
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.GOOGLE_API_KEY;
+
+      // Primary canonical placeholder
       process.env.NEXUS_GEMINI_API_KEY = '<YOUR_API_KEY>';
-      const provider = new GeminiAssistantProvider();
+      let provider = new GeminiAssistantProvider();
       assert.strictEqual(provider.isConfigured(), false);
-      const status = provider.getStatus();
+      let status = provider.getStatus();
       assert.strictEqual(status.status, 'NOT_CONFIGURED');
       assert.strictEqual(status.configured, false);
       assert.strictEqual(status.available, false);
+
+      // Fallback placeholder (e.g. MY_GEMINI_API_KEY)
+      delete process.env.NEXUS_GEMINI_API_KEY;
+      process.env.GEMINI_API_KEY = 'MY_GEMINI_API_KEY';
+      provider = new GeminiAssistantProvider();
+      assert.strictEqual(provider.isConfigured(), false);
+      status = provider.getStatus();
+      assert.strictEqual(status.status, 'NOT_CONFIGURED');
     } finally {
-      if (originalKey) {
-        process.env.NEXUS_GEMINI_API_KEY = originalKey;
-      } else {
-        delete process.env.NEXUS_GEMINI_API_KEY;
-      }
+      if (originalKey !== undefined) process.env.NEXUS_GEMINI_API_KEY = originalKey; else delete process.env.NEXUS_GEMINI_API_KEY;
+      if (originalGeminiKey !== undefined) process.env.GEMINI_API_KEY = originalGeminiKey; else delete process.env.GEMINI_API_KEY;
+      if (originalGoogleKey !== undefined) process.env.GOOGLE_API_KEY = originalGoogleKey; else delete process.env.GOOGLE_API_KEY;
     }
   });
 
@@ -453,8 +473,8 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
     }
   });
 
-  // Test 20: Minimal Diagnostic Connectivity Test
-  it('20. minimal diagnostic connectivity test reports AUTHENTICATION_ERROR when unconfigured', async () => {
+  // Test 20: Minimal Diagnostic Connectivity Test reports MISSING_API_KEY when unconfigured
+  it('20. minimal diagnostic connectivity test reports MISSING_API_KEY when unconfigured', async () => {
     const originalKey = process.env.NEXUS_GEMINI_API_KEY;
     const originalGeminiKey = process.env.GEMINI_API_KEY;
     const originalGoogleKey = process.env.GOOGLE_API_KEY;
@@ -465,7 +485,9 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
       const provider = new GeminiAssistantProvider();
       const res = await provider.testMinimalConnectivity();
       assert.strictEqual(res.success, false);
-      assert.strictEqual(res.category, 'AUTHENTICATION_ERROR');
+      assert.strictEqual(res.category, 'MISSING_API_KEY');
+      assert.strictEqual(res.status, 'NOT_CONFIGURED');
+      assert.ok(res.message?.includes('Gemini is not configured'));
     } finally {
       if (originalKey !== undefined) {
         process.env.NEXUS_GEMINI_API_KEY = originalKey;
@@ -482,6 +504,61 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
       } else {
         delete process.env.GOOGLE_API_KEY;
       }
+    }
+  });
+
+  // Test 21: Empty and Whitespace Key Handling
+  it('21. treats empty or whitespace-only API keys as unconfigured', () => {
+    const origKey = process.env.NEXUS_GEMINI_API_KEY;
+    const origGemini = process.env.GEMINI_API_KEY;
+    const origGoogle = process.env.GOOGLE_API_KEY;
+    try {
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.GOOGLE_API_KEY;
+
+      process.env.NEXUS_GEMINI_API_KEY = '';
+      let provider = new GeminiAssistantProvider();
+      assert.strictEqual(provider.isConfigured(), false);
+      assert.strictEqual(provider.getStatus().status, 'NOT_CONFIGURED');
+
+      process.env.NEXUS_GEMINI_API_KEY = '   \t  \n ';
+      provider = new GeminiAssistantProvider();
+      assert.strictEqual(provider.isConfigured(), false);
+      assert.strictEqual(provider.getStatus().status, 'NOT_CONFIGURED');
+    } finally {
+      if (origKey !== undefined) process.env.NEXUS_GEMINI_API_KEY = origKey; else delete process.env.NEXUS_GEMINI_API_KEY;
+      if (origGemini !== undefined) process.env.GEMINI_API_KEY = origGemini; else delete process.env.GEMINI_API_KEY;
+      if (origGoogle !== undefined) process.env.GOOGLE_API_KEY = origGoogle; else delete process.env.GOOGLE_API_KEY;
+    }
+  });
+
+  // Test 22: Valid Non-Placeholder Key Trimming
+  it('22. accepts valid non-placeholder API key and trims accidental surrounding whitespace and quotes', () => {
+    const origKey = process.env.NEXUS_GEMINI_API_KEY;
+    try {
+      process.env.NEXUS_GEMINI_API_KEY = '  "AIzaSyFakeValidFormatTestSecretKey12345678"  ';
+      const provider = new GeminiAssistantProvider();
+      assert.strictEqual(provider.isConfigured(), true);
+      assert.strictEqual(provider.getStatus().status, 'READY');
+      assert.strictEqual(provider.getStatus().configured, true);
+    } finally {
+      if (origKey !== undefined) process.env.NEXUS_GEMINI_API_KEY = origKey; else delete process.env.NEXUS_GEMINI_API_KEY;
+    }
+  });
+
+  // Test 23: Fallback from NEXUS_GEMINI_API_KEY to GEMINI_API_KEY
+  it('23. falls back to standard GEMINI_API_KEY if canonical NEXUS_GEMINI_API_KEY is not set', () => {
+    const origKey = process.env.NEXUS_GEMINI_API_KEY;
+    const origGemini = process.env.GEMINI_API_KEY;
+    try {
+      delete process.env.NEXUS_GEMINI_API_KEY;
+      process.env.GEMINI_API_KEY = 'AIzaSyFallbackValidKeyFormat9876543210';
+      const provider = new GeminiAssistantProvider();
+      assert.strictEqual(provider.isConfigured(), true);
+      assert.strictEqual(provider.getStatus().status, 'READY');
+    } finally {
+      if (origKey !== undefined) process.env.NEXUS_GEMINI_API_KEY = origKey; else delete process.env.NEXUS_GEMINI_API_KEY;
+      if (origGemini !== undefined) process.env.GEMINI_API_KEY = origGemini; else delete process.env.GEMINI_API_KEY;
     }
   });
 });

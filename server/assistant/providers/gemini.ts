@@ -8,14 +8,20 @@ import type {
 } from '../types.js';
 
 export type GeminiErrorCategory =
+  | 'MISSING_API_KEY'
+  | 'INVALID_API_KEY'
   | 'AUTHENTICATION_ERROR'
+  | 'PERMISSION_DENIED'
   | 'PERMISSION_ERROR'
   | 'MODEL_NOT_FOUND'
-  | 'RATE_LIMIT'
-  | 'QUOTA_ERROR'
-  | 'INVALID_REQUEST'
+  | 'RATE_LIMITED'
+  | 'QUOTA_EXCEEDED'
   | 'NETWORK_ERROR'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'INVALID_REQUEST'
+  | 'TIMEOUT'
   | 'SDK_ERROR'
+  | 'UNKNOWN_PROVIDER_ERROR'
   | 'UNKNOWN_ERROR';
 
 export interface GeminiConfigDiagnostics {
@@ -31,18 +37,52 @@ export interface GeminiConfigDiagnostics {
   sourceVariable?: string;
 }
 
+/**
+ * Identifies unconfigured placeholder strings commonly set by templates or examples.
+ */
+export function isPlaceholderKey(key: string | undefined): boolean {
+  if (!key) return true;
+  const trimmed = key.trim();
+  if (trimmed.length < 10) return true;
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.includes('<') ||
+    lower.includes('>') ||
+    lower.includes('placeholder') ||
+    lower.includes('your_api_key') ||
+    lower.includes('your-api-key') ||
+    lower.includes('changeme') ||
+    lower.includes('dummy') ||
+    lower.includes('replace_me') ||
+    lower === 'my_gemini_api_key' ||
+    (lower.startsWith('my_') && lower.endsWith('_key')) ||
+    lower === 'test_key' ||
+    lower === 'example_key'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function getGeminiConfigDiagnostics(): GeminiConfigDiagnostics {
   const providerRaw = process.env.NEXUS_ASSISTANT_PROVIDER;
   const modelRaw = process.env.NEXUS_ASSISTANT_MODEL;
 
-  let rawKey = process.env.NEXUS_GEMINI_API_KEY;
+  let rawKey: string | undefined = process.env.NEXUS_GEMINI_API_KEY;
   let sourceVariable = 'NEXUS_GEMINI_API_KEY';
   const keyIssues: string[] = [];
 
-  if (!rawKey && (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) {
-    sourceVariable = process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' : 'GOOGLE_API_KEY';
-    rawKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-    keyIssues.push(`Found fallback environment variable '${sourceVariable}' instead of 'NEXUS_GEMINI_API_KEY'.`);
+  // Check fallback environment variables if primary canonical key is missing or a placeholder
+  if (!rawKey || isPlaceholderKey(rawKey)) {
+    if (process.env.GEMINI_API_KEY && !isPlaceholderKey(process.env.GEMINI_API_KEY)) {
+      rawKey = process.env.GEMINI_API_KEY;
+      sourceVariable = 'GEMINI_API_KEY';
+      keyIssues.push("Using standard fallback 'GEMINI_API_KEY' (canonical: 'NEXUS_GEMINI_API_KEY').");
+    } else if (process.env.GOOGLE_API_KEY && !isPlaceholderKey(process.env.GOOGLE_API_KEY)) {
+      rawKey = process.env.GOOGLE_API_KEY;
+      sourceVariable = 'GOOGLE_API_KEY';
+      keyIssues.push("Using fallback 'GOOGLE_API_KEY' (canonical: 'NEXUS_GEMINI_API_KEY').");
+    }
   }
 
   let cleanKey: string | undefined = undefined;
@@ -55,17 +95,13 @@ export function getGeminiConfigDiagnostics(): GeminiConfigDiagnostics {
       trimmed = trimmed.slice(1, -1).trim();
       keyIssues.push('API key has accidental surrounding quotes.');
     }
-    if (trimmed.length < 10) {
+    if (trimmed.length === 0) {
+      keyIssues.push('API key is empty or contains only whitespace.');
+    } else if (trimmed.length < 10) {
       keyIssues.push(`API key length (${trimmed.length}) is suspiciously short.`);
-    }
-    if (
-      trimmed.includes('<') ||
-      trimmed.toLowerCase().includes('placeholder') ||
-      trimmed.toLowerCase().includes('your_api_key')
-    ) {
+    } else if (isPlaceholderKey(trimmed)) {
       keyIssues.push('API key appears to be an unconfigured placeholder.');
-    }
-    if (trimmed.length > 0) {
+    } else {
       cleanKey = trimmed;
     }
   } else {
@@ -80,7 +116,7 @@ export function getGeminiConfigDiagnostics(): GeminiConfigDiagnostics {
     providerName,
     modelConfigured: Boolean(modelRaw),
     modelName,
-    apiKeyConfigured: Boolean(cleanKey && cleanKey.length >= 10 && !cleanKey.includes('<')),
+    apiKeyConfigured: Boolean(cleanKey && cleanKey.length >= 10 && !isPlaceholderKey(cleanKey)),
     apiKeyLength: cleanKey ? cleanKey.length : 0,
     apiKeyPrefix: cleanKey && cleanKey.length >= 4 ? cleanKey.slice(0, 4) : 'none',
     keyIssues,
@@ -90,73 +126,159 @@ export function getGeminiConfigDiagnostics(): GeminiConfigDiagnostics {
 }
 
 export function classifyGeminiError(err: unknown): GeminiErrorCategory {
-  if (!err) return 'UNKNOWN_ERROR';
-  const rawMsg = err instanceof Error ? err.message : String(err);
-  const lower = rawMsg.toLowerCase();
+  if (!err) return 'UNKNOWN_PROVIDER_ERROR';
 
+  // 1. Inspect HTTP status if present on error object
+  let httpStatus: number | undefined = undefined;
+  if (typeof err === 'object' && err !== null) {
+    if ('status' in err && typeof (err as any).status === 'number') {
+      httpStatus = (err as any).status;
+    } else if ('statusCode' in err && typeof (err as any).statusCode === 'number') {
+      httpStatus = (err as any).statusCode;
+    }
+  }
+
+  const rawMsg = err instanceof Error ? err.message : String(err);
+  let parsedJsonMsg: any = undefined;
+  try {
+    if (rawMsg.startsWith('{') && rawMsg.endsWith('}')) {
+      parsedJsonMsg = JSON.parse(rawMsg);
+      if (parsedJsonMsg?.error?.code && typeof parsedJsonMsg.error.code === 'number') {
+        httpStatus = httpStatus || parsedJsonMsg.error.code;
+      }
+    }
+  } catch {
+    // Ignore JSON parse error
+  }
+
+  const lower = rawMsg.toLowerCase();
+  const jsonStatus = (parsedJsonMsg?.error?.status || '').toUpperCase();
+  const jsonMessage = (parsedJsonMsg?.error?.message || '').toLowerCase();
+
+  // Missing API Key
+  if (
+    lower.includes('missing api key') ||
+    lower.includes('api key is not set') ||
+    lower.includes('not_configured') ||
+    lower.includes('api key is required')
+  ) {
+    return 'MISSING_API_KEY';
+  }
+
+  // Invalid API Key / Authentication
   if (
     lower.includes('api key not valid') ||
     lower.includes('api_key_invalid') ||
     lower.includes('invalid api key') ||
-    lower.includes('missing api key') ||
     lower.includes('unregistered') ||
     (lower.includes('api key') && lower.includes('invalid')) ||
-    (lower.includes('api_key') && lower.includes('invalid'))
+    (lower.includes('api_key') && lower.includes('invalid')) ||
+    (jsonStatus === 'INVALID_ARGUMENT' && (lower.includes('api key') || jsonMessage.includes('api key')))
   ) {
-    return 'AUTHENTICATION_ERROR';
+    return 'INVALID_API_KEY';
   }
+
+  // Permission Denied (403 / 401)
   if (
+    httpStatus === 401 ||
+    httpStatus === 403 ||
+    jsonStatus === 'PERMISSION_DENIED' ||
+    jsonStatus === 'UNAUTHENTICATED' ||
     lower.includes('permission_denied') ||
+    lower.includes('permission denied') ||
     lower.includes('unauthenticated') ||
-    lower.includes('401') ||
-    lower.includes('403') ||
-    lower.includes('forbidden') ||
-    lower.includes('permission denied')
+    lower.includes('forbidden')
   ) {
-    return 'PERMISSION_ERROR';
+    return 'PERMISSION_DENIED';
   }
+
+  // Model Not Found (404)
   if (
+    httpStatus === 404 ||
+    jsonStatus === 'NOT_FOUND' ||
     lower.includes('model not found') ||
-    lower.includes('not_found') ||
-    lower.includes('not found') ||
-    lower.includes('is not supported') ||
     lower.includes('is not found') ||
+    lower.includes('is not supported for api version') ||
     (lower.includes('404') && (lower.includes('model') || lower.includes('models/')))
   ) {
     return 'MODEL_NOT_FOUND';
   }
-  if (lower.includes('resource_exhausted') || lower.includes('quota')) {
-    return 'QUOTA_ERROR';
-  }
-  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('rate_limit')) {
-    return 'RATE_LIMIT';
-  }
+
+  // Quota Exceeded (429 / RESOURCE_EXHAUSTED)
   if (
-    lower.includes('timeout') ||
-    lower.includes('timed out') ||
-    lower.includes('aborterror') ||
-    lower.includes('deadline exceeded') ||
-    lower.includes('etimedout') ||
+    jsonStatus === 'RESOURCE_EXHAUSTED' ||
+    lower.includes('resource_exhausted') ||
+    lower.includes('quota') ||
+    lower.includes('free_tier_requests') ||
+    lower.includes('exceeded your current quota')
+  ) {
+    return 'QUOTA_EXCEEDED';
+  }
+
+  // Rate Limited (429)
+  if (
+    httpStatus === 429 ||
+    lower.includes('429') ||
+    lower.includes('rate limit') ||
+    lower.includes('rate_limit') ||
+    lower.includes('too many requests')
+  ) {
+    return 'RATE_LIMITED';
+  }
+
+  // Network Error (check connection failures and fetch failed before generic timeout)
+  if (
     lower.includes('fetch failed') ||
     lower.includes('enotfound') ||
     lower.includes('econnrefused') ||
+    lower.includes('econnreset') ||
     lower.includes('socket hang up') ||
     lower.includes('network')
   ) {
     return 'NETWORK_ERROR';
   }
+
+  // Timeout
   if (
+    lower.includes('timeout') ||
+    lower.includes('timed out') ||
+    lower.includes('aborterror') ||
+    lower.includes('deadline exceeded') ||
+    lower.includes('etimedout')
+  ) {
+    return 'TIMEOUT';
+  }
+
+  // Provider Unavailable (5xx)
+  if (
+    (httpStatus && httpStatus >= 500 && httpStatus <= 599) ||
+    jsonStatus === 'UNAVAILABLE' ||
+    lower.includes('502 bad gateway') ||
+    lower.includes('503 service unavailable') ||
+    lower.includes('504 gateway timeout') ||
+    lower.includes('service unavailable') ||
+    lower.includes('internal server error') ||
+    lower.includes('backend error')
+  ) {
+    return 'PROVIDER_UNAVAILABLE';
+  }
+
+  // Invalid Request (400)
+  if (
+    httpStatus === 400 ||
+    jsonStatus === 'INVALID_ARGUMENT' ||
     lower.includes('invalid_argument') ||
-    lower.includes('malformed') ||
     lower.includes('bad request') ||
-    lower.includes('400')
+    lower.includes('malformed')
   ) {
     return 'INVALID_REQUEST';
   }
+
   if (lower.includes('genai') || lower.includes('google') || lower.includes('sdk')) {
     return 'SDK_ERROR';
   }
-  return 'UNKNOWN_ERROR';
+
+  return 'UNKNOWN_PROVIDER_ERROR';
 }
 
 export function sanitizeGeminiLog(text: string): string {
@@ -183,9 +305,12 @@ export class GeminiAssistantProvider implements AssistantProvider {
   public isAvailable(): boolean {
     return (
       this.isConfigured() &&
+      this.lastErrorCategory !== 'PERMISSION_DENIED' &&
       this.lastErrorCategory !== 'PERMISSION_ERROR' &&
+      this.lastErrorCategory !== 'INVALID_API_KEY' &&
       this.lastErrorCategory !== 'AUTHENTICATION_ERROR' &&
-      this.lastErrorCategory !== 'NETWORK_ERROR'
+      this.lastErrorCategory !== 'NETWORK_ERROR' &&
+      this.lastErrorCategory !== 'PROVIDER_UNAVAILABLE'
     );
   }
 
@@ -200,13 +325,16 @@ export class GeminiAssistantProvider implements AssistantProvider {
         available: false,
         execution_mode: 'Cloud API',
         reason: config.keyIssues.join(' ') || 'NEXUS_GEMINI_API_KEY is not set.',
+        error_category: 'MISSING_API_KEY',
       };
     }
 
     if (this.lastErrorCategory) {
       if (
-        this.lastErrorCategory === 'PERMISSION_ERROR' ||
-        this.lastErrorCategory === 'AUTHENTICATION_ERROR'
+        this.lastErrorCategory === 'INVALID_API_KEY' ||
+        this.lastErrorCategory === 'AUTHENTICATION_ERROR' ||
+        this.lastErrorCategory === 'PERMISSION_DENIED' ||
+        this.lastErrorCategory === 'PERMISSION_ERROR'
       ) {
         return {
           provider: 'gemini',
@@ -215,7 +343,7 @@ export class GeminiAssistantProvider implements AssistantProvider {
           status: 'AUTH_FAILED',
           available: false,
           execution_mode: 'Cloud API',
-          reason: `Gemini authentication rejected (${this.lastErrorCategory}).`,
+          reason: `Gemini credentials rejected (${this.lastErrorCategory}).`,
           error_category: this.lastErrorCategory,
         };
       }
@@ -231,7 +359,7 @@ export class GeminiAssistantProvider implements AssistantProvider {
           error_category: this.lastErrorCategory,
         };
       }
-      if (this.lastErrorCategory === 'RATE_LIMIT' || this.lastErrorCategory === 'QUOTA_ERROR') {
+      if (this.lastErrorCategory === 'RATE_LIMITED' || this.lastErrorCategory === 'QUOTA_EXCEEDED') {
         return {
           provider: 'gemini',
           model: this.model,
@@ -243,7 +371,7 @@ export class GeminiAssistantProvider implements AssistantProvider {
           error_category: this.lastErrorCategory,
         };
       }
-      if (this.lastErrorCategory === 'NETWORK_ERROR') {
+      if (this.lastErrorCategory === 'NETWORK_ERROR' || this.lastErrorCategory === 'TIMEOUT') {
         return {
           provider: 'gemini',
           model: this.model,
@@ -252,6 +380,18 @@ export class GeminiAssistantProvider implements AssistantProvider {
           available: false,
           execution_mode: 'Cloud API',
           reason: `Network error connecting to Gemini (${this.lastErrorCategory}).`,
+          error_category: this.lastErrorCategory,
+        };
+      }
+      if (this.lastErrorCategory === 'PROVIDER_UNAVAILABLE') {
+        return {
+          provider: 'gemini',
+          model: this.model,
+          configured: true,
+          status: 'UNAVAILABLE',
+          available: false,
+          execution_mode: 'Cloud API',
+          reason: 'Gemini service is temporarily unavailable.',
           error_category: this.lastErrorCategory,
         };
       }
@@ -297,7 +437,7 @@ export class GeminiAssistantProvider implements AssistantProvider {
     this.lastTestedAt = new Date().toISOString();
 
     if (!apiKey) {
-      const errCat: GeminiErrorCategory = 'AUTHENTICATION_ERROR';
+      const errCat: GeminiErrorCategory = 'MISSING_API_KEY';
       this.lastErrorCategory = errCat;
       this.lastTestSuccess = false;
       const issuesText = config.keyIssues.join(' ');
@@ -306,7 +446,7 @@ export class GeminiAssistantProvider implements AssistantProvider {
         success: false,
         category: errCat,
         error_code: errCat,
-        message: `NEXUS_GEMINI_API_KEY is not configured in backend environment. ${issuesText}`,
+        message: `Gemini is not configured on the backend. Please configure NEXUS_GEMINI_API_KEY in the backend environment. ${issuesText}`,
         model: this.model,
         latency_ms: 0,
         status: 'NOT_CONFIGURED',
@@ -315,7 +455,14 @@ export class GeminiAssistantProvider implements AssistantProvider {
 
     try {
       console.log(`[ASSISTANT] calling Gemini (diagnostic ping: model=${this.model})`);
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
       const response = await ai.models.generateContent({
         model: this.model,
         contents: 'Reply with exactly: NEXUS GEMINI CONNECTION OK',
@@ -343,24 +490,33 @@ export class GeminiAssistantProvider implements AssistantProvider {
       let safeMessage = `Gemini call failed (${category}): ${sanitized}`;
       let statusState: AssistantStatusState = 'ERROR';
 
-      if (category === 'AUTHENTICATION_ERROR') {
-        safeMessage = 'Gemini authentication failed. Please verify that NEXUS_GEMINI_API_KEY is valid and not expired.';
+      if (category === 'MISSING_API_KEY') {
+        safeMessage = 'Gemini is not configured on the backend. Please configure NEXUS_GEMINI_API_KEY in the backend environment.';
+        statusState = 'NOT_CONFIGURED';
+      } else if (category === 'INVALID_API_KEY' || category === 'AUTHENTICATION_ERROR') {
+        safeMessage = 'Gemini rejected the configured API key. Please check that NEXUS_GEMINI_API_KEY is valid and not revoked.';
+        statusState = 'AUTH_FAILED';
+      } else if (category === 'PERMISSION_DENIED' || category === 'PERMISSION_ERROR') {
+        safeMessage = 'Gemini access was denied for the configured credentials. Ensure Generative Language API is enabled in your Google Cloud / AI Studio project.';
         statusState = 'AUTH_FAILED';
       } else if (category === 'MODEL_NOT_FOUND') {
-        safeMessage = `Model '${this.model}' was not found or is not available for this API key.`;
+        safeMessage = `The configured Gemini model is unavailable. Model '${this.model}' was not found or is not supported.`;
         statusState = 'MODEL_UNAVAILABLE';
-      } else if (category === 'PERMISSION_ERROR') {
-        safeMessage = 'Gemini API permission denied. Ensure Generative Language API is enabled in your Google Cloud / AI Studio project.';
-        statusState = 'AUTH_FAILED';
-      } else if (category === 'QUOTA_ERROR') {
-        safeMessage = 'Gemini quota or resource limit exceeded. Verify usage and billing status in Google AI Studio.';
+      } else if (category === 'QUOTA_EXCEEDED') {
+        safeMessage = 'Gemini quota limit exceeded. You have reached your current usage or free-tier quota in Google AI Studio.';
         statusState = 'RATE_LIMITED';
-      } else if (category === 'RATE_LIMIT') {
-        safeMessage = 'Gemini rate limit exceeded. Please retry after a brief delay.';
+      } else if (category === 'RATE_LIMITED') {
+        safeMessage = 'Gemini rate limit exceeded. Please wait a moment before sending another request.';
         statusState = 'RATE_LIMITED';
-      } else if (category === 'NETWORK_ERROR') {
-        safeMessage = `Network error communicating with Google Gemini API (${category}).`;
+      } else if (category === 'TIMEOUT') {
+        safeMessage = 'Gemini request timed out. The upstream service took too long to respond.';
         statusState = 'NETWORK_ERROR';
+      } else if (category === 'NETWORK_ERROR') {
+        safeMessage = 'NEXUS could not reach the Gemini service. Check network connectivity from backend to Google API.';
+        statusState = 'NETWORK_ERROR';
+      } else if (category === 'PROVIDER_UNAVAILABLE') {
+        safeMessage = 'Google Gemini service is temporarily unavailable. Please retry shortly.';
+        statusState = 'UNAVAILABLE';
       }
 
       return {
@@ -382,18 +538,16 @@ export class GeminiAssistantProvider implements AssistantProvider {
 
     if (!apiKey) {
       console.error(
-        '[ASSISTANT] Gemini request failed: category=AUTHENTICATION_ERROR error=NEXUS_GEMINI_API_KEY is not set'
+        '[ASSISTANT] Gemini request failed: category=MISSING_API_KEY error=NEXUS_GEMINI_API_KEY is not configured in backend environment.'
       );
-      console.error(
-        `[GEMINI] Request failed\nprovider=gemini\nmodel=${this.model}\ncategory=AUTHENTICATION_ERROR\nerror=NEXUS_GEMINI_API_KEY is not set in backend environment.`
-      );
+      this.lastErrorCategory = 'MISSING_API_KEY';
       return {
         text: 'Gemini is not configured. Add NEXUS_GEMINI_API_KEY to the backend environment.',
         provider: 'gemini',
         model: this.model,
         latency_ms: 0,
-        error_category: 'AUTHENTICATION_ERROR',
-        warnings: ['AUTHENTICATION_ERROR', 'missing API key', 'NEXUS_GEMINI_API_KEY missing in environment'],
+        error_category: 'MISSING_API_KEY',
+        warnings: ['MISSING_API_KEY', 'missing API key', 'NEXUS_GEMINI_API_KEY is not configured in environment'],
         provenance: {
           timestamp: new Date().toISOString(),
           executionMode: 'Cloud API (Unconfigured)',
@@ -467,7 +621,14 @@ export class GeminiAssistantProvider implements AssistantProvider {
 
     console.log('[ASSISTANT] calling Gemini');
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
       const response = await ai.models.generateContent({
         model: this.model,
         contents: fullPrompt,
@@ -518,18 +679,24 @@ export class GeminiAssistantProvider implements AssistantProvider {
       );
 
       let safeErrorMessage = `Gemini request failed (${category}).`;
-      if (category === 'AUTHENTICATION_ERROR') {
-        safeErrorMessage = 'Gemini authentication failed. Please verify NEXUS_GEMINI_API_KEY in the backend environment.';
+      if (category === 'MISSING_API_KEY') {
+        safeErrorMessage = 'Gemini is not configured on the backend. Please configure NEXUS_GEMINI_API_KEY in the backend environment.';
+      } else if (category === 'INVALID_API_KEY' || category === 'AUTHENTICATION_ERROR') {
+        safeErrorMessage = 'Gemini rejected the configured API key. Please check that NEXUS_GEMINI_API_KEY is valid and not revoked.';
+      } else if (category === 'PERMISSION_DENIED' || category === 'PERMISSION_ERROR') {
+        safeErrorMessage = 'Gemini access was denied for the configured credentials. Ensure Generative Language API is enabled in your Google Cloud / AI Studio project.';
       } else if (category === 'MODEL_NOT_FOUND') {
-        safeErrorMessage = `Configured Gemini model (${this.model}) was not found or is unavailable for this API key.`;
-      } else if (category === 'PERMISSION_ERROR') {
-        safeErrorMessage = 'Gemini access was denied. Check API key permissions and project enablement in Google Cloud Console.';
-      } else if (category === 'QUOTA_ERROR') {
-        safeErrorMessage = 'Gemini quota or resource limit exceeded. Check account billing/quota limits.';
-      } else if (category === 'RATE_LIMIT') {
+        safeErrorMessage = `The configured Gemini model is unavailable. Model '${this.model}' was not found or is not supported.`;
+      } else if (category === 'QUOTA_EXCEEDED') {
+        safeErrorMessage = 'Gemini quota limit exceeded. You have reached your current usage or free-tier quota in Google AI Studio.';
+      } else if (category === 'RATE_LIMITED') {
         safeErrorMessage = 'Gemini rate limit exceeded. Please wait a moment before sending another request.';
+      } else if (category === 'TIMEOUT') {
+        safeErrorMessage = 'Gemini request timed out. The upstream service took too long to respond.';
       } else if (category === 'NETWORK_ERROR') {
-        safeErrorMessage = 'Network error communicating with Google Gemini API from backend.';
+        safeErrorMessage = 'NEXUS could not reach the Gemini service. Check network connectivity from backend to Google API.';
+      } else if (category === 'PROVIDER_UNAVAILABLE') {
+        safeErrorMessage = 'Google Gemini service is temporarily unavailable. Please retry shortly.';
       }
 
       return {

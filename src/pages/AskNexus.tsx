@@ -201,6 +201,28 @@ export const AskNexus: React.FC<AskNexusProps> = ({
       let responseContent = result.response;
       if (result.success === false || result.status === 'error' || result.error_code) {
         const errorCategory = result.error_code || (result.warnings && result.warnings[0]) || 'PROVIDER_ERROR';
+
+        let friendlyPrefix = '';
+        if (errorCategory === 'MISSING_API_KEY') {
+          friendlyPrefix = 'Gemini is not configured on the backend.';
+        } else if (errorCategory === 'INVALID_API_KEY') {
+          friendlyPrefix = 'Gemini rejected the configured API key.';
+        } else if (errorCategory === 'PERMISSION_DENIED') {
+          friendlyPrefix = 'Gemini access was denied for the configured credentials.';
+        } else if (errorCategory === 'MODEL_NOT_FOUND') {
+          friendlyPrefix = 'The configured Gemini model is unavailable.';
+        } else if (errorCategory === 'QUOTA_EXCEEDED') {
+          friendlyPrefix = 'Gemini quota or free tier limit exceeded.';
+        } else if (errorCategory === 'RATE_LIMITED') {
+          friendlyPrefix = 'Gemini rate limit exceeded.';
+        } else if (errorCategory === 'NETWORK_ERROR' || errorCategory === 'TIMEOUT') {
+          friendlyPrefix = 'NEXUS could not reach the Gemini service.';
+        }
+
+        if (friendlyPrefix && !responseContent.startsWith(friendlyPrefix)) {
+          responseContent = `${friendlyPrefix}\n\n${responseContent}`;
+        }
+
         if (!responseContent.includes('Provider:') && !responseContent.includes('Error Code:')) {
           responseContent += `\n\n[Diagnostics]\nProvider: ${result.provider || 'gemini'}\nModel: ${result.model || 'gemini-3.8-flash'}\nError Code: ${errorCategory}`;
         }

@@ -31,6 +31,25 @@ if (typeof process.loadEnvFile === 'function') {
   }
 }
 
+// In container / cloud-hosted environments, also check for platform environment JSON
+try {
+  const devEnvPath = '/app/.dev.env.json';
+  if (fs.existsSync(devEnvPath)) {
+    const raw = fs.readFileSync(devEnvPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === 'string' && v.trim().length > 0) {
+        const curr = process.env[k];
+        if (!curr || curr === 'MY_GEMINI_API_KEY' || curr.includes('placeholder') || curr.includes('your_api_key')) {
+          process.env[k] = v;
+        }
+      }
+    }
+  }
+} catch {
+  // Safe ignore
+}
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
@@ -1563,10 +1582,10 @@ app.post(['/api/v1/assistant/query', '/assistant/query'], async (req, res) => {
       multimodalSummary,
     });
 
-    const isUnconfigured = assistantResult.warnings.includes('missing API key');
-    const isError = assistantResult.warnings.some((w) => w.includes('failed') || w.includes('error') || w === 'AUTHENTICATION_ERROR');
+    const isUnconfigured = assistantResult.warnings.includes('missing API key') || assistantResult.error_category === 'MISSING_API_KEY';
+    const isError = Boolean(assistantResult.error_category) || assistantResult.warnings.some((w) => w.includes('failed') || w.includes('error') || w === 'AUTHENTICATION_ERROR' || w === 'INVALID_API_KEY');
     const isSuccess = !isUnconfigured && !isError;
-    const errorCode = assistantResult.error_category || (isUnconfigured ? 'AUTHENTICATION_ERROR' : (isError ? 'API_ERROR' : undefined));
+    const errorCode = assistantResult.error_category || (isUnconfigured ? 'MISSING_API_KEY' : (isError ? 'API_ERROR' : undefined));
 
     res.json({
       success: isSuccess,
