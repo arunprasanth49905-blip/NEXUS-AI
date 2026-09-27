@@ -368,31 +368,35 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
   it('16. accurately classifies Gemini API errors', () => {
     assert.strictEqual(
       classifyGeminiError(new Error('API_KEY_INVALID: API key not valid.')),
-      'invalid API key'
+      'AUTHENTICATION_ERROR'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('PERMISSION_DENIED: User not authenticated')),
-      'permission/authentication failure'
+      'PERMISSION_ERROR'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('models/gemini-3.8-flash is not found 404')),
-      'model not found'
+      'MODEL_NOT_FOUND'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('RESOURCE_EXHAUSTED: Rate limit exceeded (429)')),
-      'quota/rate limit'
+      'QUOTA_ERROR'
+    );
+    assert.strictEqual(
+      classifyGeminiError(new Error('Rate limit exceeded (429)')),
+      'RATE_LIMIT'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('fetch failed: connect ETIMEDOUT 172.217.112.4:443')),
-      'network failure'
+      'NETWORK_ERROR'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('Request aborted due to timeout: AbortError')),
-      'timeout'
+      'NETWORK_ERROR'
     );
     assert.strictEqual(
       classifyGeminiError(new Error('INVALID_ARGUMENT: malformed request')),
-      'malformed request'
+      'INVALID_REQUEST'
     );
   });
 
@@ -407,14 +411,14 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
   });
 
   // Test 18: Placeholder or Invalid Configuration Detection
-  it('18. identifies placeholder API key as INVALID_CONFIGURATION', () => {
+  it('18. identifies placeholder API key as NOT_CONFIGURED / unconfigured', () => {
     const originalKey = process.env.NEXUS_GEMINI_API_KEY;
     try {
       process.env.NEXUS_GEMINI_API_KEY = '<YOUR_API_KEY>';
       const provider = new GeminiAssistantProvider();
       assert.strictEqual(provider.isConfigured(), false);
       const status = provider.getStatus();
-      assert.strictEqual(status.status, 'INVALID_CONFIGURATION');
+      assert.strictEqual(status.status, 'NOT_CONFIGURED');
       assert.strictEqual(status.configured, false);
       assert.strictEqual(status.available, false);
     } finally {
@@ -439,6 +443,24 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
         process.env.NEXUS_ASSISTANT_MODEL = originalModel;
       } else {
         delete process.env.NEXUS_ASSISTANT_MODEL;
+      }
+    }
+  });
+
+  // Test 20: Minimal Diagnostic Connectivity Test
+  it('20. minimal diagnostic connectivity test reports AUTHENTICATION_ERROR when unconfigured', async () => {
+    const originalKey = process.env.NEXUS_GEMINI_API_KEY;
+    try {
+      delete process.env.NEXUS_GEMINI_API_KEY;
+      const provider = new GeminiAssistantProvider();
+      const res = await provider.testMinimalConnectivity();
+      assert.strictEqual(res.success, false);
+      assert.strictEqual(res.category, 'AUTHENTICATION_ERROR');
+    } finally {
+      if (originalKey) {
+        process.env.NEXUS_GEMINI_API_KEY = originalKey;
+      } else {
+        delete process.env.NEXUS_GEMINI_API_KEY;
       }
     }
   });

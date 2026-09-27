@@ -194,10 +194,18 @@ export const AskNexus: React.FC<AskNexusProps> = ({
         }
       }
       
+      let responseContent = result.response;
+      if (result.success === false || result.status === 'error' || result.error_code) {
+        const errorCategory = result.error_code || (result.warnings && result.warnings[0]) || 'PROVIDER_ERROR';
+        if (!responseContent.includes('Provider:') && !responseContent.includes('Error Code:')) {
+          responseContent += `\n\n[Diagnostics]\nProvider: ${result.provider || 'gemini'}\nModel: ${result.model || 'gemini-3.8-flash'}\nError Code: ${errorCategory}`;
+        }
+      }
+
       const assistantMessage: ChatMessage = {
         id: `msg-nexus-${Date.now()}`,
         role: 'assistant',
-        content: result.response,
+        content: responseContent,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         executionMode: result.execution_mode || (result.provider === 'gemini' ? 'Gemini 3.8 Flash · Cloud' : 'Local Engine'),
         provider: result.provider,
@@ -211,11 +219,27 @@ export const AskNexus: React.FC<AskNexusProps> = ({
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : '';
+      const errMsg = err instanceof Error ? err.message : String(err);
       console.error('[NEXUS Frontend] Assistant query error:', err);
-      const content = errMsg && !errMsg.includes('HTTP 500')
-        ? `NEXUS couldn't reach the configured AI provider (${errMsg}). Please verify backend connection and environment configuration.`
-        : "NEXUS couldn't reach the configured AI provider. Please verify backend connection and environment configuration.";
+
+      const isNetworkUnreachable =
+        errMsg.includes('Failed to fetch') ||
+        errMsg.includes('NetworkError') ||
+        errMsg.includes('502') ||
+        errMsg.includes('504');
+
+      const content = [
+        isNetworkUnreachable
+          ? "NEXUS backend service is currently unreachable."
+          : "NEXUS couldn't complete the assistant request.",
+        "",
+        "Provider: Gemini (Cloud)",
+        "Stage: Frontend → Backend HTTP request (/api/v1/assistant/query)",
+        `Error category: ${errMsg.includes('timeout') ? 'TIMEOUT' : (isNetworkUnreachable ? 'NETWORK_OR_RENDER_UNREACHABLE' : 'CLIENT_REQUEST_ERROR')}`,
+        `Details: ${errMsg || 'Connection failed'}`,
+        "",
+        "Please verify your Render backend deployment is running and healthy at /api/v1/health."
+      ].join('\n');
 
       const assistantMessage: ChatMessage = {
         id: `msg-nexus-${Date.now()}`,

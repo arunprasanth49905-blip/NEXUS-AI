@@ -6,8 +6,11 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'module';
 import { SecretRedactor } from '../tools/redaction.js';
 import type { UserFeedback, FeedbackRating, FeedbackCategory } from './types.js';
+
+const require = createRequire(import.meta.url);
 
 export interface FeedbackFilter {
   rating?: FeedbackRating;
@@ -45,8 +48,12 @@ export class FeedbackRepository {
         fs.mkdirSync(dataDir, { recursive: true });
       }
 
-      // @ts-ignore Node 22+ built-in sqlite
-      const sqliteModule = require('node:sqlite');
+      let sqliteModule: any = null;
+      try {
+        sqliteModule = require('node:sqlite');
+      } catch {
+        sqliteModule = null;
+      }
       if (sqliteModule && sqliteModule.DatabaseSync) {
         this.db = new sqliteModule.DatabaseSync(this.dbPath);
         this.db.exec(`

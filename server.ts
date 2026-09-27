@@ -13,6 +13,7 @@ import { FilesystemSandbox } from './server/tools/sandbox.js';
 import { ActionAuditLogger } from './server/tools/audit.js';
 import { AdaptiveEngine } from './server/adaptation/index.js';
 import { assistantManager } from './server/assistant/assistant-manager.js';
+import { getGeminiConfigDiagnostics } from './server/assistant/providers/gemini.js';
 import type { AssistantDocumentContext } from './server/assistant/types.js';
 import type { ProviderId } from './src/types/runtime.js';
 import type { ScreenCaptureRequest, CameraCaptureRequest, VoiceTranscriptionRequest } from './src/types/perception.js';
@@ -21,21 +22,101 @@ import type { MemoryType } from './src/types/context_memory.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Support native Node.js .env loading if present
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile();
+  } catch {
+    // .env is optional
+  }
+}
+
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
+
+// Safely diagnose assistant environment configuration at startup
+const startupConfig = getGeminiConfigDiagnostics();
+console.log('[ASSISTANT STARTUP]');
+console.log(`provider configured: ${startupConfig.providerConfigured} (${startupConfig.providerName})`);
+console.log(`model configured: ${startupConfig.modelConfigured} (${startupConfig.modelName})`);
+console.log(`API key configured: ${startupConfig.apiKeyConfigured}`);
+console.log(`API key length: ${startupConfig.apiKeyLength}`);
+console.log(`API key prefix: ${startupConfig.apiKeyPrefix}`);
+if (startupConfig.sourceVariable && startupConfig.sourceVariable !== 'NEXUS_GEMINI_API_KEY') {
+  console.log(`API key source: ${startupConfig.sourceVariable}`);
+}
+if (startupConfig.keyIssues.length > 0) {
+  console.log(`API key issues: ${startupConfig.keyIssues.join('; ')}`);
+}
+console.log(`server binding: ${HOST}:${PORT} (process.env.PORT: ${process.env.PORT || 'not set, default 3000'})`);
+
+// Request ID middleware
+app.use((req, res, next) => {
+  const reqId = (req.headers['x-request-id'] as string) || `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  (req as any).id = reqId;
+  res.setHeader('X-Request-ID', reqId);
+  next();
+});
 
 // Limit JSON payload up to 25MB for base64 screen/camera frames and file uploads
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// CORS configuration for local development / testing
-app.use((_req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  if (_req.method === 'OPTIONS') {
-    res.sendStatus(200);
+// Gracefully handle malformed JSON bodies with clean JSON error responses
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({
+      error: {
+        code: 'INVALID_JSON',
+        message: 'Malformed JSON payload in request body.',
+        request_id: (req as any).id || undefined,
+      },
+    });
+  }
+  next(err);
+});
+
+// Dynamic CORS configuration supporting Vercel deployments and local development
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.CORS_ALLOWED_ORIGINS,
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+].filter(Boolean) as string[];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    let isAllowed = false;
+    try {
+      const parsedOrigin = new URL(origin);
+      isAllowed =
+        allowedOrigins.includes(origin) ||
+        parsedOrigin.hostname.endsWith('.vercel.app') ||
+        parsedOrigin.hostname === 'localhost' ||
+        parsedOrigin.hostname === '127.0.0.1';
+    } catch {
+      isAllowed = false;
+    }
+
+    if (isAllowed) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Request-ID');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
     return;
   }
   next();
@@ -73,19 +154,150 @@ const actionAuditLogger = ActionAuditLogger.getInstance();
 // Instantiate Adaptive Intelligence & Continuous Learning Engine (Phase 7)
 const adaptiveEngine = AdaptiveEngine.getInstance();
 
-// 1. Health check
+// 1. Health check (Phase C: Simple, zero optional dependency requirement)
 app.get('/api/v1/health', (_req, res) => {
-  const runtimeStatus = runtimeManager.getRuntimeStatus();
   res.json({
-    status: runtimeStatus.runtime_state === 'READY' ? 'ready' : 'limited',
-    service: PROJECT_NAME,
+    status: 'ok',
+    service: 'nexus-edge',
+    environment: process.env.NODE_ENV || 'production',
     version: VERSION,
-    phase: PHASE,
     timestamp: new Date().toISOString(),
-    runtime_ready: runtimeStatus.runtime_state === 'READY',
-    privacy: 'protected',
-    active_provider: runtimeStatus.active_provider,
   });
+});
+
+// 1b. Detailed Subsystem Diagnostics (Phase D: Real state of backend subsystems)
+app.get('/api/v1/health/detailed', async (_req, res) => {
+  let serverState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let configState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let runtimeState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let perceptionState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let contextState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let memoryState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let agentsState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let toolsState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+  let learningState: 'READY' | 'LIMITED' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'ERROR' = 'READY';
+
+  try {
+    configState = 'READY';
+  } catch {
+    configState = 'ERROR';
+  }
+
+  try {
+    const rStatus = runtimeManager.getRuntimeStatus();
+    if (rStatus && rStatus.runtime_state === 'READY') {
+      runtimeState = 'READY';
+    } else if (rStatus && (rStatus.runtime_state === 'DEGRADED' || rStatus.runtime_state === 'PROCESSING')) {
+      runtimeState = 'LIMITED';
+    } else {
+      runtimeState = 'UNAVAILABLE';
+    }
+  } catch {
+    runtimeState = 'ERROR';
+  }
+
+  try {
+    const pStatus = perceptionManager.getStatus();
+    perceptionState = pStatus ? 'READY' : 'LIMITED';
+  } catch {
+    perceptionState = 'ERROR';
+  }
+
+  try {
+    const cStatus = await contextMemoryEngine.getStatus();
+    contextState = cStatus.context_engine.status === 'READY' ? 'READY' : 'LIMITED';
+    memoryState = contextMemoryEngine.getRepository().isUsingSqlite() ? 'READY' : 'LIMITED';
+  } catch {
+    contextState = 'ERROR';
+    memoryState = 'ERROR';
+  }
+
+  try {
+    const aReport = agentOrchestrator.getStatusReport();
+    agentsState = aReport && aReport.agents_registered_count > 0 ? 'READY' : 'LIMITED';
+  } catch {
+    agentsState = 'ERROR';
+  }
+
+  try {
+    const tReport = toolExecutionEngine.getStatusReport();
+    toolsState = tReport && tReport.registered_tools_count > 0 ? 'READY' : 'LIMITED';
+  } catch {
+    toolsState = 'ERROR';
+  }
+
+  try {
+    const lReport = adaptiveEngine.getStatusReport();
+    learningState = lReport ? 'READY' : 'LIMITED';
+  } catch {
+    learningState = 'ERROR';
+  }
+
+  let assistantDiagnostics: any = {
+    provider: 'gemini',
+    model: 'gemini-3.8-flash',
+    configured: false,
+    status: 'NOT_CONFIGURED',
+  };
+
+  try {
+    const astStatus = assistantManager.getStatus();
+    assistantDiagnostics = {
+      provider: astStatus.provider,
+      model: astStatus.model,
+      configured: astStatus.configured,
+      status: astStatus.status,
+      execution_mode: astStatus.execution_mode,
+      reason: astStatus.reason,
+      ...(astStatus.error_category ? { error_category: astStatus.error_category } : {}),
+    };
+  } catch {
+    assistantDiagnostics = {
+      provider: 'gemini',
+      model: 'gemini-3.8-flash',
+      configured: false,
+      status: 'ERROR',
+    };
+  }
+
+  res.json({
+    server: serverState,
+    configuration: configState,
+    runtime: runtimeState,
+    perception: perceptionState,
+    context: contextState,
+    memory: memoryState,
+    agents: agentsState,
+    tools: toolsState,
+    learning: learningState,
+    assistant: assistantDiagnostics,
+  });
+});
+
+// 1c. Safe Assistant Provider Connectivity Test (Task 4 & 9)
+app.all(['/api/v1/assistant/test', '/assistant/test'], async (_req, res) => {
+  const activeProvider = assistantManager.getActiveProvider();
+  if (activeProvider.id === 'gemini') {
+    const geminiProvider = activeProvider as any;
+    const testResult = await geminiProvider.testMinimalConnectivity();
+    res.json({
+      provider: 'gemini',
+      model: geminiProvider.model,
+      prompt: 'Reply with exactly: NEXUS GEMINI CONNECTION OK',
+      ...testResult,
+      timestamp: new Date().toISOString(),
+    });
+  } else {
+    res.json({
+      success: true,
+      provider: activeProvider.id,
+      model: activeProvider.model,
+      status: 'READY',
+      message: `${activeProvider.name} is active in local mode.`,
+      latency_ms: 0,
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // 2. System diagnostics
@@ -685,13 +897,24 @@ app.get('/api/v1/tools/policies', (_req, res) => {
   });
 });
 
-app.get('/api/v1/tools/:tool_id', (req, res) => {
-  const tool = toolRegistry.get(req.params.tool_id);
-  if (!tool) {
-    res.status(404).json({ error: `Tool '${req.params.tool_id}' not found.` });
+app.get('/api/v1/tools/executions', (_req, res) => {
+  res.json({
+    executions: toolExecutionEngine.listExecutions(),
+  });
+});
+
+app.get('/api/v1/tools/executions/:execution_id', (req, res) => {
+  const exec = toolExecutionEngine.getExecution(req.params.execution_id);
+  if (!exec) {
+    res.status(404).json({ error: `Execution '${req.params.execution_id}' not found.` });
     return;
   }
-  res.json({ tool: tool.getInfo() });
+  res.json({ execution: exec });
+});
+
+app.post('/api/v1/tools/executions/:execution_id/cancel', (req, res) => {
+  const cancelled = toolExecutionEngine.cancelExecution(req.params.execution_id);
+  res.json({ success: cancelled, execution_id: req.params.execution_id });
 });
 
 app.post('/api/v1/tools/validate', (req, res) => {
@@ -733,24 +956,14 @@ app.post('/api/v1/tools/execute', async (req, res) => {
   }
 });
 
-app.get('/api/v1/tools/executions', (_req, res) => {
-  res.json({
-    executions: toolExecutionEngine.listExecutions(),
-  });
-});
-
-app.get('/api/v1/tools/executions/:execution_id', (req, res) => {
-  const exec = toolExecutionEngine.getExecution(req.params.execution_id);
-  if (!exec) {
-    res.status(404).json({ error: `Execution '${req.params.execution_id}' not found.` });
+app.get(['/api/v1/tools/:tool_id', '/api/v1/tools/:id'], (req, res) => {
+  const targetId = req.params.tool_id || (req.params as any).id;
+  const tool = toolRegistry.get(targetId);
+  if (!tool) {
+    res.status(404).json({ error: `Tool '${targetId}' not found.` });
     return;
   }
-  res.json({ execution: exec });
-});
-
-app.post('/api/v1/tools/executions/:execution_id/cancel', (req, res) => {
-  const cancelled = toolExecutionEngine.cancelExecution(req.params.execution_id);
-  res.json({ success: cancelled, execution_id: req.params.execution_id });
+  res.json({ tool: tool.getInfo() });
 });
 
 app.get('/api/v1/actions', (req, res) => {
@@ -903,6 +1116,45 @@ app.post('/api/v1/preferences', (req, res) => {
   });
 
   res.status(201).json({ success: true, preference: pref });
+});
+
+// Suggested preference candidates (Registered BEFORE /api/v1/preferences/:id to avoid route shadowing)
+app.get('/api/v1/preferences/candidates', (_req, res) => {
+  const candidates = adaptiveEngine.preferenceRepo.listPendingCandidates();
+  res.json({ candidates, total: candidates.length });
+});
+
+app.post('/api/v1/preferences/suggest', (req, res) => {
+  const { category, key, value, rationale, scope } = req.body || {};
+  if (!category || !key || !value || !rationale) {
+    res.status(400).json({ error: 'category, key, value, and rationale are required.' });
+    return;
+  }
+
+  const candidate = adaptiveEngine.preferenceManager.suggestCandidate({
+    category,
+    key,
+    value,
+    rationale,
+    scope,
+  });
+
+  res.status(201).json({ success: true, candidate });
+});
+
+app.post('/api/v1/preferences/candidates/:id/resolve', (req, res) => {
+  const { accept } = req.body || {};
+  const pref = adaptiveEngine.preferenceRepo.resolveCandidate(req.params.id, Boolean(accept));
+
+  if (accept && pref) {
+    adaptiveEngine.recordHistory({
+      title: `Approved suggested preference: ${pref.key}`,
+      detail: `Value: "${pref.value}" (Scope: ${pref.scope})`,
+      category: 'preference',
+    });
+  }
+
+  res.json({ success: true, accepted: Boolean(accept), preference: pref });
 });
 
 // 3. Get single preference
@@ -1081,7 +1333,7 @@ app.get('/api/v1/outcomes/:id', (req, res) => {
   res.json({ outcome });
 });
 
-// 14. Personalization recommendations
+// 14. Personalization recommendations & application
 app.post('/api/v1/personalization/recommend', (req, res) => {
   const { query, project_id, task_id } = req.body || {};
   const rec = adaptiveEngine.personalizationEngine.getRecommendations({
@@ -1092,49 +1344,26 @@ app.post('/api/v1/personalization/recommend', (req, res) => {
   res.json(rec);
 });
 
-// 15. Suggested preference candidates (Section 8 & 38)
-app.get('/api/v1/preferences/candidates', (_req, res) => {
-  const candidates = adaptiveEngine.preferenceRepo.listPendingCandidates();
-  res.json({ candidates, total: candidates.length });
-});
-
-app.post('/api/v1/preferences/suggest', (req, res) => {
-  const { category, key, value, rationale, scope } = req.body || {};
-  if (!category || !key || !value || !rationale) {
-    res.status(400).json({ error: 'category, key, value, and rationale are required.' });
-    return;
-  }
-
-  const candidate = adaptiveEngine.preferenceManager.suggestCandidate({
-    category,
-    key,
-    value,
-    rationale,
-    scope,
+app.post('/api/v1/personalization/apply', (req, res) => {
+  const { context, query, project_id, task_id } = req.body || {};
+  const baseContext = typeof context === 'string' ? context : '';
+  const result = adaptiveEngine.personalizationEngine.applyPersonalizationToContext(baseContext, {
+    query: query || '',
+    project_id,
+    task_id,
   });
-
-  res.status(201).json({ success: true, candidate });
-});
-
-app.post('/api/v1/preferences/candidates/:id/resolve', (req, res) => {
-  const { accept } = req.body || {};
-  const pref = adaptiveEngine.preferenceRepo.resolveCandidate(req.params.id, Boolean(accept));
-
-  if (accept && pref) {
-    adaptiveEngine.recordHistory({
-      title: `Approved suggested preference: ${pref.key}`,
-      detail: `Value: "${pref.value}" (Scope: ${pref.scope})`,
-      category: 'preference',
-    });
-  }
-
-  res.json({ success: true, accepted: Boolean(accept), preference: pref });
+  res.json(result);
 });
 
 // ----------------------------------------------------
 // INTEGRATED MULTIMODAL + CONTEXT + RUNTIME INFERENCE
 // ----------------------------------------------------
 app.post(['/api/v1/assistant/query', '/assistant/query'], async (req, res) => {
+  console.log('[ASSISTANT] request received');
+  console.log(`[ASSISTANT] provider=${assistantManager.configuredProviderName}`);
+  console.log(`[ASSISTANT] model=${assistantManager.modelName}`);
+  console.log(`[ASSISTANT] api_key_configured=${Boolean(process.env.NEXUS_GEMINI_API_KEY?.trim())}`);
+
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
   const contextIds: string[] = Array.isArray(req.body?.context_ids) ? req.body.context_ids : [];
 
@@ -1227,15 +1456,19 @@ app.post(['/api/v1/assistant/query', '/assistant/query'], async (req, res) => {
     });
 
     const isUnconfigured = assistantResult.warnings.includes('missing API key');
-    const isError = assistantResult.warnings.some((w) => w.includes('failed') || w.includes('error'));
+    const isError = assistantResult.warnings.some((w) => w.includes('failed') || w.includes('error') || w === 'AUTHENTICATION_ERROR');
+    const isSuccess = !isUnconfigured && !isError;
+    const errorCode = assistantResult.error_category || (isUnconfigured ? 'AUTHENTICATION_ERROR' : (isError ? 'API_ERROR' : undefined));
 
     res.json({
+      success: isSuccess,
+      provider: assistantResult.provider,
+      model: assistantResult.model,
+      ...(errorCode ? { error_code: errorCode, message: assistantResult.text } : {}),
       response: assistantResult.text,
       status: isUnconfigured ? 'warning' : (isError ? 'error' : 'success'),
       phase: PHASE,
       execution_mode: assistantResult.provenance?.executionMode || 'Cloud API',
-      provider: assistantResult.provider,
-      model: assistantResult.model,
       provider_status: isUnconfigured ? 'NOT_CONFIGURED' : (isError ? 'ERROR' : 'READY'),
       latency_ms: assistantResult.latency_ms,
       fallback_used: assistantResult.provider === 'local' && assistantManager.configuredProviderName === 'auto',
@@ -1259,6 +1492,7 @@ app.post(['/api/v1/assistant/query', '/assistant/query'], async (req, res) => {
       },
       timestamp: new Date().toISOString(),
     });
+    console.log('[ASSISTANT] response returned');
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Local engine query failed';
     res.status(500).json({
@@ -1272,8 +1506,24 @@ app.post(['/api/v1/assistant/query', '/assistant/query'], async (req, res) => {
 });
 
 // Assistant status endpoint - aliased for both /api/v1/assistant/status and /assistant/status
-app.get(['/api/v1/assistant/status', '/assistant/status'], (_req, res) => {
-  res.json(assistantManager.getStatus());
+app.get(['/api/v1/assistant/status', '/assistant/status'], async (req, res) => {
+  if (req.query?.diagnostic === 'true' && assistantManager.getActiveProvider().id === 'gemini') {
+    const geminiProvider = assistantManager.getActiveProvider() as any;
+    if (typeof geminiProvider.testMinimalConnectivity === 'function') {
+      await geminiProvider.testMinimalConnectivity();
+    }
+  }
+  const status = assistantManager.getStatus();
+  res.json({
+    provider: status.provider,
+    model: status.model,
+    configured: status.configured,
+    status: status.status,
+    available: status.available,
+    execution_mode: status.execution_mode,
+    reason: status.reason,
+    ...(status.error_category ? { error_category: status.error_category } : {}),
+  });
 });
 
 // Root API info endpoint
@@ -1294,9 +1544,50 @@ app.get('/api/info', async (_req, res) => {
   });
 });
 
+// Catch unhandled /api/* routes so they NEVER fall through to HTML or Vite SPA
+app.all('/api/{*splat}', (req, res) => {
+  res.status(404).json({
+    error: {
+      code: 'NOT_FOUND',
+      message: `API endpoint '${req.method} ${req.originalUrl}' not found.`,
+      request_id: (req as any).id || undefined,
+    },
+  });
+});
+
+// Centralized backend error handler (Phase M)
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const statusCode = typeof err.statusCode === 'number' ? err.statusCode : 500;
+  const errorCode = err.code || (statusCode === 400 ? 'BAD_REQUEST' : statusCode === 404 ? 'NOT_FOUND' : 'INTERNAL_SERVER_ERROR');
+  const message = err.message || 'An unexpected internal error occurred';
+
+  // Sanitize message - never expose secrets or keys
+  const sanitizedMessage = String(message)
+    .replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED_API_KEY]')
+    .replace(/(?:bearer|token)\s+[a-zA-Z0-9._-]+/gi, '[REDACTED_TOKEN]');
+
+  console.error(`[BACKEND ERROR] ${req.method} ${req.originalUrl}:`, err.stack || err.message || err);
+
+  res.status(statusCode).json({
+    error: {
+      code: errorCode,
+      message: sanitizedMessage,
+      request_id: (req as any).id || undefined,
+    },
+  });
+});
+
 // Start Vite in dev mode or serve static files in production
-async function startServer() {
+export async function startServer(customPort?: number, customHost?: string) {
+  if (process.argv.includes('--dev')) {
+    process.env.NODE_ENV = 'development';
+  } else if (!process.env.NODE_ENV) {
+    process.env.NODE_ENV = 'production';
+  }
+
   const isProduction = process.env.NODE_ENV === 'production';
+  const listenPort = customPort !== undefined ? customPort : PORT;
+  const listenHost = customHost !== undefined ? customHost : HOST;
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
@@ -1313,12 +1604,23 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, HOST, () => {
-    console.log(`[NEXUS EDGE] Server running on http://${HOST}:${PORT}`);
+  return new Promise<import('http').Server>((resolve) => {
+    const serverInstance = app.listen(listenPort, listenHost, () => {
+      console.log(`[NEXUS EDGE] Server running on http://${listenHost}:${listenPort} (${process.env.NODE_ENV || 'production'})`);
+      resolve(serverInstance);
+    });
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+export { app };
+
+const isDirectExecution = Boolean(
+  process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js'))
+);
+
+if (isDirectExecution) {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}

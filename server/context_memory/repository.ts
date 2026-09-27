@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'module';
 import type { MemoryRecord, MemoryType } from '../../src/types/context_memory.js';
+
+const require = createRequire(import.meta.url);
 
 export interface MemoryFilterOptions {
   session_id?: string;
@@ -28,12 +31,17 @@ export class MemoryRepository {
         fs.mkdirSync(dataDir, { recursive: true });
       }
 
-      // Dynamically load node:sqlite
-      // @ts-ignore Node 22+ built-in
-      const sqliteModule = require('node:sqlite');
+      let sqliteModule: any = null;
+      try {
+        sqliteModule = require('node:sqlite');
+      } catch {
+        sqliteModule = null;
+      }
       if (sqliteModule && sqliteModule.DatabaseSync) {
         this.db = new sqliteModule.DatabaseSync(this.dbPath);
         this.db.exec(`
+          PRAGMA journal_mode = WAL;
+          PRAGMA busy_timeout = 5000;
           CREATE TABLE IF NOT EXISTS memories (
             memory_id TEXT PRIMARY KEY,
             memory_type TEXT NOT NULL,

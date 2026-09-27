@@ -102,6 +102,9 @@ class ApiService {
   }
 
   public async sendAssistantQuery(message: string, contextIds?: string[], contextType: string = 'general'): Promise<{
+    success?: boolean;
+    error_code?: string;
+    message?: string;
     response: string;
     status: string;
     phase: string;

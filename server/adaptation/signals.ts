@@ -5,7 +5,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'module';
 import { SecretRedactor } from '../tools/redaction.js';
+
+const require = createRequire(import.meta.url);
 import type {
   LearningSignal,
   LearningSignalType,
@@ -48,8 +51,12 @@ export class LearningSignalRepository {
         fs.mkdirSync(dataDir, { recursive: true });
       }
 
-      // @ts-ignore Node 22+ built-in sqlite
-      const sqliteModule = require('node:sqlite');
+      let sqliteModule: any = null;
+      try {
+        sqliteModule = require('node:sqlite');
+      } catch {
+        sqliteModule = null;
+      }
       if (sqliteModule && sqliteModule.DatabaseSync) {
         this.db = new sqliteModule.DatabaseSync(this.dbPath);
         this.db.exec(`

@@ -47,6 +47,7 @@ export interface AssistantResponse {
   latency_ms: number;
   grounded_context?: string[];
   warnings: string[];
+  error_category?: string;
   provenance?: {
     timestamp: string;
     executionMode: string;
@@ -56,8 +57,13 @@ export interface AssistantResponse {
 
 export type AssistantStatusState =
   | 'READY'
+  | 'CONFIGURED'
   | 'NOT_CONFIGURED'
   | 'INVALID_CONFIGURATION'
+  | 'AUTH_FAILED'
+  | 'MODEL_UNAVAILABLE'
+  | 'RATE_LIMITED'
+  | 'NETWORK_ERROR'
   | 'UNAVAILABLE'
   | 'ERROR';
 

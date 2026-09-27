@@ -5,12 +5,15 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'module';
 import type {
   TaskOutcomeRecord,
   StrategyRecord,
   LearningSignalType,
 } from './types.js';
 import { LearningSignalManager } from './signals.js';
+
+const require = createRequire(import.meta.url);
 
 export class OutcomeRepository {
   private static instance: OutcomeRepository | null = null;
@@ -42,8 +45,12 @@ export class OutcomeRepository {
         fs.mkdirSync(dataDir, { recursive: true });
       }
 
-      // @ts-ignore Node 22+ built-in sqlite
-      const sqliteModule = require('node:sqlite');
+      let sqliteModule: any = null;
+      try {
+        sqliteModule = require('node:sqlite');
+      } catch {
+        sqliteModule = null;
+      }
       if (sqliteModule && sqliteModule.DatabaseSync) {
         this.db = new sqliteModule.DatabaseSync(this.dbPath);
         this.db.exec(`
