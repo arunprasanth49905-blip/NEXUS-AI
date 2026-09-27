@@ -131,7 +131,11 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
   // Test 2: Missing API Key
   it('2. returns explicit capability error when API key is missing', async () => {
     const originalKey = process.env.NEXUS_GEMINI_API_KEY;
+    const originalGeminiKey = process.env.GEMINI_API_KEY;
+    const originalGoogleKey = process.env.GOOGLE_API_KEY;
     delete process.env.NEXUS_GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
     try {
       const provider = new GeminiAssistantProvider();
       assert.strictEqual(provider.isConfigured(), false);
@@ -147,7 +151,9 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
       );
       assert.ok(res.warnings.includes('missing API key'));
     } finally {
-      if (originalKey) process.env.NEXUS_GEMINI_API_KEY = originalKey;
+      if (originalKey !== undefined) process.env.NEXUS_GEMINI_API_KEY = originalKey;
+      if (originalGeminiKey !== undefined) process.env.GEMINI_API_KEY = originalGeminiKey;
+      if (originalGoogleKey !== undefined) process.env.GOOGLE_API_KEY = originalGoogleKey;
     }
   });
 
@@ -450,17 +456,31 @@ describe('NEXUS Assistant Provider & Gemini Integration Tests', () => {
   // Test 20: Minimal Diagnostic Connectivity Test
   it('20. minimal diagnostic connectivity test reports AUTHENTICATION_ERROR when unconfigured', async () => {
     const originalKey = process.env.NEXUS_GEMINI_API_KEY;
+    const originalGeminiKey = process.env.GEMINI_API_KEY;
+    const originalGoogleKey = process.env.GOOGLE_API_KEY;
     try {
       delete process.env.NEXUS_GEMINI_API_KEY;
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.GOOGLE_API_KEY;
       const provider = new GeminiAssistantProvider();
       const res = await provider.testMinimalConnectivity();
       assert.strictEqual(res.success, false);
       assert.strictEqual(res.category, 'AUTHENTICATION_ERROR');
     } finally {
-      if (originalKey) {
+      if (originalKey !== undefined) {
         process.env.NEXUS_GEMINI_API_KEY = originalKey;
       } else {
         delete process.env.NEXUS_GEMINI_API_KEY;
+      }
+      if (originalGeminiKey !== undefined) {
+        process.env.GEMINI_API_KEY = originalGeminiKey;
+      } else {
+        delete process.env.GEMINI_API_KEY;
+      }
+      if (originalGoogleKey !== undefined) {
+        process.env.GOOGLE_API_KEY = originalGoogleKey;
+      } else {
+        delete process.env.GOOGLE_API_KEY;
       }
     }
   });

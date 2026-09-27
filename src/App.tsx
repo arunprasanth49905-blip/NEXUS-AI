@@ -78,10 +78,20 @@ export function App() {
   }, [addToast]);
 
   useEffect(() => {
-    checkHealth(false);
+    let mounted = true;
+    const poll = () => {
+      if (mounted) {
+        void checkHealth(false);
+      }
+    };
+    const initialTimer = setTimeout(poll, 0);
     // Periodic subtle check every 30 seconds
-    const intervalId = setInterval(() => checkHealth(false), 30000);
-    return () => clearInterval(intervalId);
+    const intervalId = setInterval(poll, 30000);
+    return () => {
+      mounted = false;
+      clearTimeout(initialTimer);
+      clearInterval(intervalId);
+    };
   }, [checkHealth]);
 
   const handleStartConversation = (query: string) => {

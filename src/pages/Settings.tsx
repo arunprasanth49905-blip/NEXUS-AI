@@ -99,7 +99,16 @@ export const Settings: React.FC<SettingsProps> = ({
 
   useEffect(() => {
     if (activeSection === 'personalization') {
-      loadAdaptationData();
+      let active = true;
+      const timer = setTimeout(() => {
+        if (active) {
+          void loadAdaptationData();
+        }
+      }, 0);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
     }
   }, [activeSection, loadAdaptationData]);
 

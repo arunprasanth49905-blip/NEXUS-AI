@@ -1,4 +1,7 @@
 {
   "name": "NEXUS EDGE",
-  "description": "Context-aware edge AI workspace. Understand what you're doing, get intelligent help, and keep your data private."
+  "description": "Context-aware edge AI workspace. Understand what you're doing, get intelligent help, and keep your data private.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

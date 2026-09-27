@@ -179,7 +179,16 @@ export const AdvancedDiagnostics: React.FC<AdvancedDiagnosticsProps> = ({
   }, [onAddToast]);
 
   useEffect(() => {
-    loadDiagnostics(false);
+    let active = true;
+    const timer = setTimeout(() => {
+      if (active) {
+        void loadDiagnostics(false);
+      }
+    }, 0);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [loadDiagnostics]);
 
   const handleRunBenchmark = async (providerId: ProviderId) => {

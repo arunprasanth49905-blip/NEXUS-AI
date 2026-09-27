@@ -45,18 +45,12 @@ export const CameraModal: React.FC<CameraModalProps> = ({
   }, [stream]);
 
   useEffect(() => {
-    if (!isOpen) {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        setStream(null);
-      }
-    }
     return () => {
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [isOpen, stream]);
+  }, [stream]);
 
   const startCamera = async () => {
     setStatusMessage('Requesting camera permission from browser...');

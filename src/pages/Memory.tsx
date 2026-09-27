@@ -44,7 +44,16 @@ export const Memory: React.FC<MemoryProps> = ({ onAddToast }) => {
   }, [filterType, onAddToast]);
 
   useEffect(() => {
-    loadMemories();
+    let active = true;
+    const timer = setTimeout(() => {
+      if (active) {
+        void loadMemories();
+      }
+    }, 0);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [loadMemories]);
 
   const handleSearch = async (e: React.FormEvent) => {

@@ -156,11 +156,16 @@ const adaptiveEngine = AdaptiveEngine.getInstance();
 
 // 1. Health check (Phase C: Simple, zero optional dependency requirement)
 app.get('/api/v1/health', (_req, res) => {
+  const rStatus = runtimeManager.getRuntimeStatus();
   res.json({
     status: 'ok',
     service: 'nexus-edge',
     environment: process.env.NODE_ENV || 'production',
     version: VERSION,
+    phase: PHASE,
+    runtime_ready: rStatus.runtime_state === 'READY',
+    privacy: 'Protected (Zero Cloud Telemetry)',
+    active_provider: rStatus.active_provider || 'cpu',
     timestamp: new Date().toISOString(),
   });
 });

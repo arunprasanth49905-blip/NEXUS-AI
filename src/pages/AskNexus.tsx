@@ -340,8 +340,11 @@ export const AskNexus: React.FC<AskNexusProps> = ({
   // If initialQuery passed from Home, send or prefill
   useEffect(() => {
     if (initialQuery) {
-      handleSend(initialQuery);
-      onClearInitialQuery?.();
+      const timer = setTimeout(() => {
+        handleSend(initialQuery);
+        onClearInitialQuery?.();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [initialQuery, handleSend, onClearInitialQuery]);
 
